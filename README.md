@@ -26,8 +26,11 @@ All branding lives in one file, [`js/config.js`](js/config.js). Nothing else in 
 | To change | Edit in `js/config.js` |
 | --- | --- |
 | Site name and tagline | `siteTitle`, `tagline` |
-| Logo and browser-tab icon | Drop an image in `assets/` and set `logo: "assets/logo.png"`. With no logo, a badge is drawn from `logoText`. |
-| Colors | `theme.brand`, `theme.accent`, `theme.highlight` — text on top of them turns black or white automatically |
+| Logo | Drop an image in `assets/` and set `logo: "assets/logo.png"`. It sits on the brand-colored top bar, so pick a version that reads well there. |
+| Browser-tab icon | `favicon` (a square image), or leave `""` for a badge drawn from `logoText` in your brand color |
+| Brand colors | `theme.brand`, `theme.accent`, `theme.highlight` — text on top of them turns black or white automatically |
+| Page colors | `theme.light` and `theme.dark` (background, surface, border, text, muted) — optional; delete them for neutral grays |
+| Fonts | `theme.font`, `theme.headingFont`, `theme.fontUrl` (a Google Fonts link) — optional; leave `""` for the system font |
 | Light or dark by default | `theme.defaultMode` |
 | Top-bar links | `links` |
 | Footer credit link | `repoUrl` (or `""` to hide) |
@@ -124,7 +127,7 @@ siteTitle: "Your Team Name",
 tagline: "Photo library",
 googleApiKey: "AIza...your key...",
 rootFolderId: "1AbCdEfGhIjKlMnOpQrStUvWxYz",
-theme: { brand: "#1f2a44", accent: "#3b82f6", highlight: "#f59e0b", defaultMode: "light" },
+theme: { brand: "#17001c", accent: "#f85259", highlight: "#a335e6", defaultMode: "light" },
 ```
 
 Set your name, logo and colors in the same file — see [Make it yours](#make-it-yours).

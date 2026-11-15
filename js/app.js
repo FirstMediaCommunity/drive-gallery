@@ -112,6 +112,21 @@
     if (t.highlight) root.style.setProperty("--highlight", t.highlight);
     if (C.rowHeight) root.style.setProperty("--row-h", C.rowHeight + "px");
 
+    // Optional page colors per mode (theme.light / theme.dark).
+    const VARS = { background: "--bg", surface: "--surface", border: "--edge", text: "--fg", muted: "--muted" };
+    const block = (selector, colors) => {
+      const lines = Object.entries(colors || {}).filter(([k, v]) => VARS[k] && v).map(([k, v]) => `${VARS[k]}:${v};`);
+      if (colors && colors.muted) lines.push(`--subtle:${colors.muted};`);
+      return lines.length ? `${selector}{${lines.join("")}}` : "";
+    };
+    const palette = block(':root:not([data-theme="dark"])', t.light) + block(':root[data-theme="dark"]', t.dark);
+    if (palette) document.head.insertAdjacentHTML("beforeend", `<style>${palette.replace(/[<>]/g, "")}</style>`);
+
+    // Optional fonts.
+    if (t.fontUrl) document.head.insertAdjacentHTML("beforeend", `<link rel="stylesheet" href="${esc(t.fontUrl)}">`);
+    if (t.font) root.style.setProperty("--font", `"${t.font}"`);
+    if (t.headingFont) root.style.setProperty("--font-heading", `"${t.headingFont}"`);
+
     // Pick black or white text for each brand color, whichever reads better.
     const probe = document.createElement("canvas").getContext("2d");
     const rgbOf = (color) => {
@@ -135,8 +150,7 @@
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${brand}"/>` +
       `<text x="32" y="33" text-anchor="middle" dominant-baseline="central" font-family="system-ui,Segoe UI,Arial,sans-serif" font-weight="700" ` +
       `font-size="${initials.length > 3 ? 19 : initials.length > 2 ? 24 : 30}" fill="${readableOn(brand)}">${esc(initials)}</text></svg>`);
-    const logoUrl = C.logo || badge;
-    $('link[rel="icon"]').href = logoUrl;
+    $('link[rel="icon"]').href = C.favicon || badge;
 
     let mode = t.defaultMode || "light";
     try { mode = localStorage.getItem("dg:theme") || mode; } catch {}

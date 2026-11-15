@@ -1,7 +1,7 @@
-Put your logo here (PNG, SVG or JPG — square works best), then set its path in `js/config.js`:
+`logo.svg` is the logo shown in the top bar. Replace it with your own (PNG, SVG or JPG), or add a new file and point to it in `js/config.js`:
 
 ```js
 logo: "assets/logo.png",
 ```
 
-With no logo set, the site draws a badge from `logoText` in your brand color.
+Set `logo: ""` to show just the site title.

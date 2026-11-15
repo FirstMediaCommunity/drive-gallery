@@ -16,8 +16,12 @@ window.GALLERY_CONFIG = {
   // Your logo: put an image in the assets/ folder and name it here,
   // e.g. "assets/logo.png". Leave "" and the site draws a badge from
   // logoText in your brand color instead (also used as the tab icon).
-  logo: "",
+  // The top bar uses your brand color, so a logo that reads well on it works best.
+  logo: "assets/logo.svg",
   logoText: "FMC",                      // 1–4 letters for the badge ("" = initials of siteTitle)
+
+  // Browser-tab icon: path to a square image, or "" to use the badge.
+  favicon: "",
 
   // Links shown in the top bar, e.g. your main website. [] for none.
   links: [
@@ -28,10 +32,33 @@ window.GALLERY_CONFIG = {
   // Any CSS color works. Text on top of these switches between black
   // and white automatically so it stays readable.
   theme: {
-    brand: "#1f2a44",      // top bar and main buttons
-    accent: "#3b82f6",     // highlights, hover states, selected things
-    highlight: "#f59e0b",  // small details (active photo, cover badge)
+    brand: "#17001c",      // top bar and main buttons
+    accent: "#f85259",     // highlights, hover states, selected things
+    highlight: "#a335e6",  // small details (active photo, cover badge)
     defaultMode: "light",  // "light" or "dark" (visitors can switch)
+
+    // OPTIONAL — page colors for each mode. Delete either block (or any
+    // line in it) to fall back to the built-in neutral grays.
+    light: {
+      background: "#f8f0f0",   // page background
+      surface: "#ffffff",      // cards, buttons, inputs
+      border: "#ead9dc",       // thin lines
+      text: "#17001c",         // main text
+      muted: "#5c4a60",        // secondary text
+    },
+    dark: {
+      background: "#09040d",
+      surface: "#1f0b27",
+      border: "#3a1d45",
+      text: "#f9f0fb",
+      muted: "#c9b8cf",
+    },
+
+    // OPTIONAL — fonts. Leave all three "" to use the visitor's system font.
+    // fontUrl is a Google Fonts stylesheet link that loads the two families.
+    font: "Nunito",
+    headingFont: "Dela Gothic One",
+    fontUrl: "https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Nunito:wght@400;600;700&display=swap",
   },
 
   // ── 3. Your photos (Google Drive) ──────────────────────────
