@@ -50,7 +50,12 @@ Every function maps to one endpoint. Shapes are exactly what the demo returns, s
 | `folder(folderId)` | `GET /api/folders/:id` | `{ id, name, description, parentId, kind, visibility? }` |
 | `path(folderId)` | `GET /api/folders/:id/path` | `[{ id, name }, …]` root first |
 | `cover(folderId)` | `GET /api/folders/:id/cover` | `{ item, photos, folders }` |
-| `redeemLink(token)` | `POST /api/links/:token/redeem` | folder id; sets a cookie that unlocks that folder |
+| `redeemLink(token, password?)` | `POST /api/links/:token/redeem` | folder id; sets a cookie that unlocks that folder. Throws `401` with `needsPassword: true` if the link has a password |
+| `unlock(folderId, password)` | `POST /api/folders/:id/unlock` | nothing; sets a cookie that remembers the gallery password was entered |
+| `uploadInfo(token)` | `GET /api/upload-links/:token` | `{ name, description, needsPassword }` for the upload page |
+| `guestUpload(token, password, file)` | `POST /api/upload-links/:token/files` | the new item. Lets the holder add files, never view |
+
+`list` and `folder` throw `401` with `{ needsPassword: true, folderId, hint }` when a password-protected gallery hasn't been unlocked; the page then shows the password form. Every folder also carries a `settings` object (see `DEFAULTS` in `js/backend.js`) — never include the password or its hash in it.
 
 **Organizing (requires the `organize` permission — check it on every call)**
 
@@ -59,13 +64,13 @@ Every function maps to one endpoint. Shapes are exactly what the demo returns, s
 | `admin.tree()` | `GET /api/admin/tree` |
 | `admin.contents(folderId)` | `GET /api/admin/folders/:id/contents` (unfiltered) |
 | `admin.create(parentId, { kind, name, description, visibility })` | `POST /api/admin/folders` |
-| `admin.updateFolder(id, { name, description, visibility, coverId })` | `PATCH /api/admin/folders/:id` |
-| `admin.updateItem(id, { title, description, visibility })` | `PATCH /api/admin/items/:id` |
+| `admin.updateFolder(id, { name, description, visibility, coverId, settings, password })` | `PATCH /api/admin/folders/:id` |
+| `admin.updateItem(id, { title, description, keywords, visibility })` | `PATCH /api/admin/items/:id` |
 | `admin.move(ids, targetFolderId)` | `POST /api/admin/move` |
 | `admin.reorder(idsInOrder)` | `POST /api/admin/reorder` |
 | `admin.remove(ids)` | `POST /api/admin/delete` |
 | `admin.addItem(folderId, file)` | `POST /api/admin/folders/:id/upload` |
-| `admin.links(folderId)` / `createLink` / `revokeLink` | `GET` / `POST` / `DELETE /api/admin/links` |
+| `admin.links(folderId, type)` / `createLink(folderId, { type, label, days, password })` / `revokeLink(token)` | `GET` / `POST` / `DELETE /api/admin/links` — `type` is `"view"` or `"upload"` |
 
 Errors: throw an `Error` with a `status` (`403`, `404`, `400`) and a human-readable `message` — the UI shows the message as-is.
 
@@ -79,7 +84,7 @@ item.visibility      inherit | public | internal
 ```
 
 - **Public** — listed for everyone.
-- **Unlisted** — not listed anywhere; anyone holding the link can open it.
+- **Unlisted** — not listed for anyone except organizers (team members don't see it either); anyone holding the link can open it.
 - **Internal** — logged-in members only.
 - An item normally **inherits** from its gallery, but can be pinned **public** (shows publicly even inside an internal gallery) or **internal** (hidden publicly even inside a public gallery).
 
@@ -112,7 +117,12 @@ Either way, uploads from the Organize screen should go to the server, which writ
 
 ## Access links
 
-An access link is a random token that unlocks one folder (and everything under it) for someone without an account.
+There are two kinds, and they are deliberately separate:
+
+- A **view link** is a random token that unlocks one folder (and everything under it) for someone without an account — for example parents viewing an internal gallery. It can carry its own password.
+- An **upload link** lets the holder add files to one gallery. It grants no viewing rights at all.
+
+Gallery passwords and link passwords: hash them with a slow salted hash on the server, rate-limit guesses, and never send the hash to the browser. A valid view link bypasses the gallery's own password (the link is the invitation); logged-in members bypass it too.
 
 - Generate at least 128 bits from a cryptographic RNG. Store only a hash of the token.
 - Support expiry and "turn off"; check both on every request, not only when the link is first opened.
@@ -137,7 +147,7 @@ Defined at the top of `js/auth.js`:
 | Role | Permissions | Sees |
 | --- | --- | --- |
 | *(not logged in)* | — | public galleries, pinned-public items, unlisted galleries by link |
-| `member` | `view-internal` | everything, read-only |
+| `member` | `view-internal` | public and internal galleries, read-only; unlisted only by link |
 | `organizer` | `view-internal`, `organize` | everything, plus the Organize screen |
 
 Add roles (for example a `publisher` who can change visibility but not delete) by adding permissions there and checking them in the matching handlers.

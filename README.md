@@ -42,10 +42,27 @@ Demo mode has three kinds of visitor so you can see what each one gets. Click **
 | Who | Username | Password | Sees |
 | --- | --- | --- | --- |
 | Public visitor | *(don't log in)* | | Public galleries, plus photos pinned "Always public" |
-| Team member | `member` | `pear-member-5414` | Everything, including Internal and Unlisted galleries |
+| Team member | `member` | `pear-member-5414` | Public and Internal galleries (Unlisted ones only by link, like everyone else) |
 | Organizer | `organizer` | `pear-organizer-5414` | Everything, plus the **Organize** screen |
 
 Things to try as the organizer: create a gallery, drag photos to reorder them, drag a gallery onto a folder in the sidebar, set a gallery to Internal and then log out to watch it disappear, pin one photo in an internal gallery as "Always public", and create an access link under **Share**.
+
+**Gallery settings** (select a gallery → Settings) follow SmugMug's tabs:
+
+| Tab | Settings |
+| --- | --- |
+| Basics | Name, description, meta keywords, feature image |
+| Security & Sharing | Visibility (Public / Unlisted / Internal), Access (Anyone / People with password) with password + hint, web searchable, view links, guest upload links |
+| Photo Protection | Maximum display size, allow downloads |
+| Social | Show sharing options |
+| Appearance | Gallery style (SmugMug, Thumbnails, Collage Landscape, Collage Portrait, Journal), cover image, square thumbnails, sort by + direction, show camera info, show filenames, slideshow |
+
+**Two kinds of link**, both under Share and under Settings → Security & Sharing:
+
+- **View link** — lets someone without an account (a parent, a sponsor) see one gallery, even an Internal one. Optional password and expiry; turn it off any time.
+- **Upload link** — lets someone add photos to one gallery without logging in. It does not let them view it.
+
+Not copied from SmugMug: selling/shopping cart, comments, map features and "hide owner", which don't apply here.
 
 Changes you make are saved in your own browser only. **Reset demo** in the Organize toolbar puts everything back.
 
@@ -129,7 +146,7 @@ A common setup keeps an "internal" copy and a "public" copy of the same photo. H
 | Setting | On a gallery | On a single photo |
 | --- | --- | --- |
 | **Public** | Listed for everyone | Shown publicly even inside an internal gallery |
-| **Unlisted** | Hidden from listings; anyone with the link can open it | — |
+| **Unlisted** | Hidden from listings (from team members too); anyone with the link can open it | — |
 | **Internal** | Logged-in team members only | Hidden publicly even inside a public gallery |
 
 Public visitors and team members look at the same library through a different filter, so "make this public" flips a setting instead of copying a file.

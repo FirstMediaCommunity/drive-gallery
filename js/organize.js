@@ -30,7 +30,7 @@
 
   const VIS = {
     public:   { label: "Public",   desc: "Listed on the site. Anyone can see it." },
-    unlisted: { label: "Unlisted", desc: "Hidden from listings. Anyone with the link can open it." },
+    unlisted: { label: "Unlisted", desc: "Hidden from listings — even from team members. Anyone with the link can open it." },
     internal: { label: "Internal", desc: "Only logged-in team members can see it." },
   };
   const ITEM_VIS = {
@@ -110,7 +110,8 @@
         <div class="otile-label">
           <b>${esc(f.name)}</b>
           <span>${f.kind === "folder" ? icon.folder : icon.images}${f.count} ${f.count === 1 ? "item" : "items"}
-            ${f.visibility !== "public" ? `<em class="ovis ovis-${f.visibility}">${VIS[f.visibility].label}</em>` : ""}</span>
+            ${f.visibility !== "public" ? `<em class="ovis ovis-${f.visibility}">${VIS[f.visibility].label}</em>` : ""}
+            ${f.hasPassword ? `<em class="ovis">${icon.lock}Password</em>` : ""}</span>
         </div>
       </div>`;
 
@@ -469,17 +470,56 @@
 
   async function folderSettings(f) {
     const inside = f.kind === "gallery" ? (await B.admin.contents(f.id)).items.filter((i) => i.type === "image").slice(0, 30) : [];
+    const s = f.settings;
+    const gallery = f.kind === "gallery";
+    const select = (name, label, options, hint) => `
+      <label class="ofield">${label}<select name="${name}">${Object.entries(options).map(([v, text]) =>
+        `<option value="${v}" ${s[name] === v ? "selected" : ""}>${text}</option>`).join("")}</select>${hint ? `<small class="ohint">${hint}</small>` : ""}</label>`;
+    const toggle = (name, label, hint) => `
+      <label class="otoggle"><input type="checkbox" name="${name}" ${s[name] ? "checked" : ""}><span><b>${label}</b>${hint ? `<small>${hint}</small>` : ""}</span></label>`;
+
     dialog({
-      title: `${f.kind === "gallery" ? "Gallery" : "Folder"} settings`,
+      title: `${gallery ? "Gallery" : "Folder"} settings — ${f.name}`,
       wide: true,
       body: `
         <div class="otabs">
           <button type="button" class="on" data-tab="basics">Basics</button>
           <button type="button" data-tab="security">Security &amp; Sharing</button>
+          ${gallery ? `<button type="button" data-tab="protection">Photo Protection</button>
+          <button type="button" data-tab="social">Social</button>` : ""}
+          <button type="button" data-tab="appearance">Appearance</button>
+        </div>
+        ${gallery ? `<div data-pane="protection" hidden>
+          ${select("maxSize", "Maximum display size", {
+            original: "Original", "4k": "TV & Computer (4K)", x5: "X5 (2208px)", x4: "X4 (2048px)", x3: "X3 (1600px)",
+            x2: "X2 (1280px)", xl: "XL (1024px)", l: "L (800px)", m: "M (600px)",
+          }, "The largest size visitors can view. Smaller sizes make photos harder to reuse.")}
+          ${toggle("downloads", "Allow downloads", "Show download buttons on photos and in the viewer.")}
+        </div>
+        <div data-pane="social" hidden>
+          ${toggle("sharing", "Show sharing options", "Show Share buttons on the gallery and in the viewer.")}
+        </div>` : ""}
+        <div data-pane="appearance" hidden>
+          ${gallery ? select("style", "Gallery style", {
+            smugmug: "SmugMug (thumbnails + large photo)", thumbnails: "Thumbnails",
+            "collage-landscape": "Collage Landscape (default)", "collage-portrait": "Collage Portrait", journal: "Journal",
+          }) : ""}
+          ${toggle("coverImage", gallery ? "Gallery cover image" : "Folder cover image", "Show the large cover photo behind the title.")}
+          ${gallery ? toggle("squareThumbs", "Square thumbnails", "Crop thumbnails to squares in the Thumbnails and SmugMug styles.") : ""}
+          <div class="orow">
+            ${select("sortBy", "Sort by", gallery
+              ? { position: "Position (manual)", caption: "Caption", filename: "Filename", dateUploaded: "Date uploaded", dateModified: "Date modified", dateTaken: "Date taken" }
+              : { position: "Position (manual)", filename: "Name", dateUploaded: "Date created" })}
+            ${select("sortDir", "Sort direction", { asc: "Ascending", desc: "Descending" })}
+          </div>
+          ${gallery ? toggle("cameraInfo", "Show camera info", "Let visitors see camera, lens and exposure details.") : ""}
+          ${gallery ? toggle("filenames", "Show filenames", "Always show each photo's title on the gallery page.") : ""}
+          ${gallery ? toggle("slideshow", "Slideshow", "Show the Slideshow button.") : ""}
         </div>
         <div data-pane="basics">
           <label class="ofield">Name<input name="name" maxlength="80" required value="${A.esc(f.name)}"></label>
           <label class="ofield">Description<textarea name="description" rows="2" maxlength="500">${A.esc(f.description || "")}</textarea></label>
+          <label class="ofield">Meta keywords<input name="keywords" maxlength="300" placeholder="keyword 1, keyword 2, etc" value="${A.esc(s.keywords || "")}"></label>
           <div class="ofield">Feature image
             ${inside.length ? `<div class="ocovers">
                 <label><input type="radio" name="coverId" value="" ${!f.coverId ? "checked" : ""}><span class="ocover-auto">Auto</span></label>
@@ -489,9 +529,20 @@
         </div>
         <div data-pane="security" hidden>
           <div class="ofield">Visibility${radios("visibility", VIS, f.visibility)}</div>
-          <div class="ofield">Access links <small class="ohint">Let someone without an account open this ${f.kind}.</small>
-            <div class="olinks" data-links></div>
+          ${select("access", "Access", { anyone: "Anyone", password: "People with password" },
+            "Who can open it once they've found it. Team members never need the password.")}
+          <div data-password ${s.access === "password" ? "" : "hidden"}>
+            <label class="ofield">Password<input name="password" type="text" autocomplete="off" maxlength="80"
+              placeholder="${f.hasPassword ? "Leave blank to keep the current password" : "Choose a password"}"></label>
+            <label class="ofield">Password hint <i>(optional, shown to visitors)</i><input name="passwordHint" maxlength="120" value="${A.esc(s.passwordHint || "")}"></label>
           </div>
+          ${select("webSearchable", "Web searchable", { true: "Site setting (yes)", false: "No" }, "“No” asks search engines not to index this page.")}
+          <div class="ofield">View links <small class="ohint">Let someone without an account — a parent, a sponsor — see this ${f.kind}. Each link can have its own password and expiry.</small>
+            <div class="olinks" data-links="view"></div>
+          </div>
+          ${gallery ? `<div class="ofield">Guest uploading <small class="ohint">An upload link lets someone add photos to this gallery without logging in. It does not let them view it.</small>
+            <div class="olinks" data-links="upload"></div>
+          </div>` : ""}
         </div>`,
       onOpen: (dlg) => {
         dlg.querySelector(".otabs").onclick = (e) => {
@@ -500,10 +551,22 @@
           dlg.querySelectorAll("[data-tab]").forEach((b) => b.classList.toggle("on", b === e.target));
           dlg.querySelectorAll("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== tab));
         };
-        linksSection(dlg.querySelector("[data-links]"), f.id);
+        dlg.querySelector('[name="access"]').onchange = (e) => (dlg.querySelector("[data-password]").hidden = e.target.value !== "password");
+        dlg.querySelector('[name="webSearchable"]').value = String(s.webSearchable);
+        dlg.querySelectorAll("[data-links]").forEach((box) => linksSection(box, f.id, box.dataset.links));
       },
       onOk: async (dlg) => {
-        const patch = { name: val(dlg, "name"), description: val(dlg, "description"), visibility: picked(dlg, "visibility") };
+        const on = (name) => dlg.querySelector(`[name="${name}"]`)?.checked;
+        const settings = {
+          keywords: val(dlg, "keywords"), access: val(dlg, "access"), passwordHint: val(dlg, "passwordHint"),
+          webSearchable: val(dlg, "webSearchable") === "true",
+          coverImage: on("coverImage"), sortBy: val(dlg, "sortBy"), sortDir: val(dlg, "sortDir"),
+        };
+        if (gallery) Object.assign(settings, {
+          maxSize: val(dlg, "maxSize"), downloads: on("downloads"), sharing: on("sharing"), style: val(dlg, "style"),
+          squareThumbs: on("squareThumbs"), cameraInfo: on("cameraInfo"), filenames: on("filenames"), slideshow: on("slideshow"),
+        });
+        const patch = { name: val(dlg, "name"), description: val(dlg, "description"), visibility: picked(dlg, "visibility"), settings, password: val(dlg, "password") };
         if (inside.length) patch.coverId = picked(dlg, "coverId") || null;
         await B.admin.updateFolder(f.id, patch);
         A.toast("Settings saved");
@@ -518,9 +581,26 @@
       body: `
         <label class="ofield">Title<input name="title" maxlength="120" required value="${A.esc(it.title)}"></label>
         <label class="ofield">Caption<textarea name="description" rows="2" maxlength="500">${A.esc(it.description || "")}</textarea></label>
-        <div class="ofield">Who can see it${radios("visibility", ITEM_VIS, it.visibility)}</div>`,
+        <label class="ofield">Keywords<input name="keywords" maxlength="300" placeholder="keyword 1, keyword 2, etc" value="${A.esc(it.keywords || "")}"></label>
+        <div class="ofield">Who can see it${radios("visibility", ITEM_VIS, it.visibility)}</div>
+        <div class="ofield">File details
+          <dl class="ometa">${[
+            ["File", it.name],
+            ["Type", it.type === "video" ? "Video" : "Photo"],
+            ["Dimensions", it.w && it.h ? `${it.w} × ${it.h}` : ""],
+            ["Size", it.size ? (it.size / 1e6).toFixed(1) + " MB" : ""],
+            ["Length", it.duration ? `${Math.floor(it.duration / 60)}:${String(Math.round(it.duration % 60)).padStart(2, "0")}` : ""],
+            ["Taken", A.fmtDate(it.date)],
+            ["Uploaded", A.fmtDate(it.uploaded)],
+            ["Uploaded by", it.uploadedBy],
+            ["Camera", it.camera],
+            ["Lens", it.lens],
+            ["Settings", [it.focal && `${Math.round(it.focal)}mm`, it.aperture && `ƒ/${it.aperture}`,
+              it.exposure && (it.exposure < 1 ? `1/${Math.round(1 / it.exposure)}s` : `${it.exposure}s`), it.iso && `ISO ${it.iso}`].filter(Boolean).join(" · ")],
+          ].filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${A.esc(v)}</dd>`).join("")}</dl>
+        </div>`,
       onOk: async (dlg) => {
-        await B.admin.updateItem(it.id, { title: val(dlg, "title"), description: val(dlg, "description"), visibility: picked(dlg, "visibility") });
+        await B.admin.updateItem(it.id, { title: val(dlg, "title"), description: val(dlg, "description"), keywords: val(dlg, "keywords"), visibility: picked(dlg, "visibility") });
         A.toast("Saved");
         await refresh();
       },
@@ -543,12 +623,13 @@
           <div class="ocopy"><input readonly value="${A.esc(url)}"><button type="button" class="obtn" data-copy="${A.esc(url)}">${A.icon.copy}Copy</button></div>
           <small class="ohint"><em class="ovis ovis-${vis}">${VIS[vis].label}</em> ${who}</small>
         </div>
-        ${!item && folder.id !== B.rootId ? `<div class="ofield">Access links <small class="ohint">A private link that opens this ${folder.kind} without logging in. Turn it off any time.</small>
-          <div class="olinks" data-links></div></div>` : ""}`,
+        ${!item && folder.id !== B.rootId ? `<div class="ofield">View links <small class="ohint">A private link that lets someone see this ${folder.kind} without logging in — for parents, sponsors, anyone without an account. Add a password if you like, and turn it off any time.</small>
+          <div class="olinks" data-links="view"></div></div>
+          ${folder.kind === "gallery" ? `<div class="ofield">Upload links <small class="ohint">A separate link that lets someone add photos to this gallery without logging in. It does not let them view the gallery.</small>
+          <div class="olinks" data-links="upload"></div></div>` : ""}` : ""}`,
       onOpen: (dlg) => {
         wireCopy(dlg);
-        const box = dlg.querySelector("[data-links]");
-        if (box) linksSection(box, folder.id);
+        dlg.querySelectorAll("[data-links]").forEach((box) => linksSection(box, folder.id, box.dataset.links));
       },
     });
   }
@@ -562,28 +643,34 @@
     });
   }
 
-  // List + create + turn off access links for one folder.
-  async function linksSection(box, folderId) {
+  // List + create + turn off links for one folder. type: "view" or "upload".
+  async function linksSection(box, folderId, type) {
+    const route = type === "upload" ? "#/u/" : "#/s/";
     const paint = async () => {
-      const links = await B.admin.links(folderId);
+      const links = await B.admin.links(folderId, type);
       box.innerHTML = `
         ${links.map((l) => `
           <div class="olink">
-            <div><b>${A.esc(l.label)}</b><small>Created ${A.fmtDate(l.created)}${l.expires ? ` · ${l.expires < Date.now() ? "expired" : "expires"} ${A.fmtDate(l.expires)}` : " · never expires"}</small></div>
-            <button type="button" class="obtn" data-copy="${A.esc(siteUrl("#/s/" + l.token))}">${A.icon.copy}Copy</button>
+            <div><b>${A.esc(l.label)}${l.hasPassword ? ` <em class="ovis">${A.icon.lock}Password</em>` : ""}</b>
+              <small>Created ${A.fmtDate(l.created)}${l.expires ? ` · ${l.expires < Date.now() ? "expired" : "expires"} ${A.fmtDate(l.expires)}` : " · never expires"}</small></div>
+            <button type="button" class="obtn" data-copy="${A.esc(siteUrl(route + l.token))}">${A.icon.copy}Copy</button>
             <button type="button" class="obtn obtn-danger" data-revoke="${A.esc(l.token)}">Turn off</button>
-          </div>`).join("") || `<small class="ohint">No access links yet.</small>`}
+          </div>`).join("") || `<small class="ohint">No ${type} links yet.</small>`}
         <div class="olink-new">
-          <input placeholder="Label, e.g. “Sponsor preview”" maxlength="60" data-label>
+          <input placeholder="Label, e.g. “${type === "upload" ? "Parent photos" : "Parents — camp week 1"}”" maxlength="60" data-label>
+          <input placeholder="Password (optional)" maxlength="80" autocomplete="off" data-password>
           <select data-days><option value="">Never expires</option><option value="7">Expires in 7 days</option><option value="30">Expires in 30 days</option></select>
-          <button type="button" class="obtn obtn-accent" data-make>Create link</button>
+          <button type="button" class="obtn obtn-accent" data-make>Create ${type} link</button>
         </div>
-        <small class="ohint">Demo note: the pretend server lives in this browser, so access links only work here. On a real server they work for anyone.</small>`;
+        <small class="ohint">Demo note: the pretend server lives in this browser, so links only work here. On a real server they work for anyone.</small>`;
     };
     box.addEventListener("click", (e) => run(async () => {
       if (e.target.closest("[data-make]")) {
-        await B.admin.createLink(folderId, { label: box.querySelector("[data-label]").value, days: Number(box.querySelector("[data-days]").value) || null });
-        A.toast("Access link created");
+        await B.admin.createLink(folderId, {
+          type, label: box.querySelector("[data-label]").value, password: box.querySelector("[data-password]").value,
+          days: Number(box.querySelector("[data-days]").value) || null,
+        });
+        A.toast(`${type === "upload" ? "Upload" : "View"} link created`);
         await paint();
       }
       const revoke = e.target.closest("[data-revoke]");

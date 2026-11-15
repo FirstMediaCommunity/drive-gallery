@@ -92,6 +92,18 @@
     lb: -1, lbPushed: false, slideshow: null,
   };
 
+  // Per-gallery settings (edited in Organize → Settings). Live Drive mode,
+  // which has no Organize screen, simply uses these defaults.
+  const DEFAULT_SETTINGS = {
+    downloads: true, sharing: true, slideshow: true, cameraInfo: true, filenames: false,
+    style: "collage-landscape", coverImage: true, squareThumbs: true, maxSize: "original", webSearchable: true,
+  };
+  // "Maximum display size": the longest edge the viewer is allowed to load.
+  const SIZES = { original: Infinity, "4k": 3840, x5: 2208, x4: 2048, x3: 1600, x2: 1280, xl: 1024, l: 800, m: 600 };
+  const settings = () => state.settings || DEFAULT_SETTINGS;
+  const bigSize = () => Math.min(C.lightboxSize || 2000, SIZES[settings().maxSize] || Infinity);
+  const canDownload = () => C.allowDownloads && settings().downloads;
+
   function initChrome() {
     const root = document.documentElement;
     const t = C.theme || {};
@@ -186,7 +198,10 @@
     try {
       const [folder, listing, crumbs] = await Promise.all([D.folder(id), D.list(id), D.path(id)]);
       if (state.folderId !== id) return; // user navigated away while loading
-      Object.assign(state, { folder, folders: listing.folders, items: listing.items });
+      Object.assign(state, {
+        folder, folders: listing.folders, items: listing.items,
+        settings: { ...DEFAULT_SETTINGS, ...(folder.settings || {}) },
+      });
       renderFolder(crumbs);
     } catch (err) {
       if (state.folderId !== id) return;
@@ -208,8 +223,14 @@
 
     document.title = isRoot ? `${C.siteTitle} — ${C.tagline || "Gallery"}` : `${folder.name} · ${C.siteTitle}`;
 
+    const s = settings();
+    // "Web searchable: No" asks search engines to skip this page.
+    let robots = document.querySelector('meta[name="robots"]');
+    if (!robots) { robots = document.createElement("meta"); robots.name = "robots"; document.head.append(robots); }
+    robots.content = s.webSearchable ? "all" : "noindex";
+
     view.innerHTML = `
-      <section class="hero ${isRoot ? "hero-home" : ""}">
+      <section class="hero ${isRoot ? "hero-home" : ""} ${s.coverImage ? "" : "hero-plain"}">
         <div class="hero-bg" id="hero-bg"></div>
         <div class="hero-inner">
           ${!isRoot && parent ? `<p class="hero-kicker">${esc(parent)}</p>` : ""}
@@ -228,7 +249,7 @@
                 : `<a href="${hashFor(c.id)}">${esc(c.name)}</a><span class="sep">/</span>`).join("")}
           </nav>
           <div class="tools">
-            ${items.length > 8 ? `<label class="search">${icon.search}<input id="q" type="search" placeholder="Filter by name" aria-label="Filter by name"></label>` : ""}
+            ${items.length > 8 ? `<label class="search">${icon.search}<input id="q" type="search" placeholder="Filter by name or keyword" aria-label="Filter by name or keyword"></label>` : ""}
             ${photos && videos ? `<div class="seg" id="kind" role="group" aria-label="Show">
                 <button data-kind="all" class="on">All</button><button data-kind="image">Photos</button><button data-kind="video">Videos</button>
               </div>` : ""}
@@ -236,20 +257,23 @@
                 ${D.demo ? `<option value="manual">Gallery order</option>` : ""}<option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option>
                 <option value="new">Newest first</option><option value="old">Oldest first</option>
               </select>` : ""}
-            ${photos > 1 ? `<button class="btn" id="slideshow">${icon.play}<span>Slideshow</span></button>` : ""}
-            <button class="btn" id="share">${icon.share}<span>Share</span></button>
+            ${photos > 1 && s.slideshow ? `<button class="btn" id="slideshow">${icon.play}<span>Slideshow</span></button>` : ""}
+            ${s.sharing ? `<button class="btn" id="share">${icon.share}<span>Share</span></button>` : ""}
             ${D.demo && Auth.can("organize") ? `<a class="btn" href="#/organize/${esc(folder.id)}">${icon.gear}<span>Organize</span></a>` : ""}
             ${C.showDriveLink && !D.demo ? `<a class="btn" href="${D.folderUrl(folder.id)}" target="_blank" rel="noopener">${icon.external}<span>Open in Drive</span></a>` : ""}
           </div>
         </div>
         ${folders.length ? `<section class="tiles" id="tiles">${folders.map(tileHtml).join("")}</section>` : ""}
         ${folders.length && items.length ? `<h2 class="section-title">Photos &amp; videos</h2>` : ""}
-        <section class="grid" id="grid"></section>
+        <div class="${s.style === "smugmug" ? "sm-wrap" : ""}">
+          <section class="grid style-${s.style} ${s.squareThumbs ? "" : "fit"} ${s.filenames ? "show-names" : ""}" id="grid"></section>
+          ${s.style === "smugmug" ? `<aside class="sm-preview" id="sm-preview" title="Click to view full screen"></aside>` : ""}
+        </div>
         ${!folders.length && !items.length ? `<p class="empty">This gallery is empty.</p>` : ""}
       </div>`;
 
-    // hero cover
-    D.cover(folder.id).then(({ item }) => {
+    // hero cover (skipped when "Gallery cover image" is off)
+    if (s.coverImage) D.cover(folder.id).then(({ item }) => {
       const bg = $("#hero-bg");
       if (!item || !bg || state.folder !== folder) return;
       const img = new Image();
@@ -283,7 +307,7 @@
       [...$("#kind").children].forEach((x) => x.classList.toggle("on", x === b));
       renderGrid();
     });
-    $("#share").onclick = () => share(folder.name);
+    $("#share")?.addEventListener("click", () => share(folder.name));
     $("#slideshow")?.addEventListener("click", () => {
       const first = state.shown.findIndex((i) => i.type === "image");
       if (first >= 0) { openAt(first); toggleSlideshow(true); }
@@ -294,11 +318,13 @@
 
   const tileHtml = (f) => `
     <a class="tile" id="tile-${esc(f.id)}" href="${hashFor(f.id)}">
-      <div class="tile-frame"><div class="tile-img"></div>${f.visibility && f.visibility !== "public" ? visBadge(f.visibility) : ""}</div>
+      <div class="tile-frame"><div class="tile-img"></div>${
+        f.locked ? `<span class="badge">${icon.lock}Password</span>` : f.visibility && f.visibility !== "public" ? visBadge(f.visibility) : ""}</div>
       <div class="tile-body"><h3>${esc(f.name)}</h3><p class="tile-meta">&nbsp;</p></div>
     </a>`;
 
   function renderError(err) {
+    if (D.demo && err.needsPassword) return renderPassword(err);
     if (D.demo) {
       const locked = err.status === 403 && !Auth.user();
       if (locked) sessionStorage.setItem("dg:return-to", location.hash);
@@ -325,6 +351,75 @@
       </div>`;
   }
 
+  // A gallery (or a view link) that asks for a password.
+  function renderPassword(err) {
+    document.title = `Password needed · ${C.siteTitle}`;
+    view.innerHTML = `
+      <form class="notice login" id="pw-form">
+        <h1>Password needed</h1>
+        <p>${esc(err.message)}</p>
+        ${err.hint ? `<p class="notice-hint">Hint: ${esc(err.hint)}</p>` : ""}
+        <label>Password<input id="pw-input" type="password" autocomplete="off" required autofocus></label>
+        <button class="btn btn-primary" type="submit">Open gallery</button>
+        <p class="notice-err" id="pw-err" role="alert"></p>
+      </form>`;
+    $("#pw-form").onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        if (err.linkToken) {
+          const folderId = await Backend.redeemLink(err.linkToken, $("#pw-input").value);
+          history.replaceState(null, "", hashFor(folderId));
+        } else {
+          await Backend.unlock(err.folderId, $("#pw-input").value);
+        }
+        state.folderId = null;
+        route();
+      } catch (bad) {
+        $("#pw-err").textContent = bad.message;
+        $("#pw-input").value = "";
+      }
+    };
+  }
+
+  // The page an upload link opens: add photos to one gallery, no login.
+  async function renderUpload(token) {
+    state.folderId = null;
+    let info;
+    try { info = await Backend.uploadInfo(token); } catch (err) { return renderError(err); }
+    document.title = `Upload to ${info.name} · ${C.siteTitle}`;
+    view.innerHTML = `
+      <div class="notice login upload">
+        <h1>Add photos to “${esc(info.name)}”</h1>
+        <p>${esc(info.description) || "Choose photos from your device to add them to this gallery."}</p>
+        ${info.needsPassword ? `<label>Password for this upload link<input id="up-pass" type="password" autocomplete="off"></label>` : ""}
+        <label class="dropzone" id="up-drop">${icon.upload}<b>Choose photos</b><span>or drag them here</span>
+          <input id="up-file" type="file" accept="image/*" multiple hidden></label>
+        <p class="notice-err" id="up-err" role="alert"></p>
+        <ul class="up-list" id="up-list"></ul>
+        <p class="notice-hint">Demo: uploads stay in this browser tab until it is reloaded.</p>
+      </div>`;
+    const send = async (files) => {
+      $("#up-err").textContent = "";
+      for (const file of files.filter((f) => f.type.startsWith("image/"))) {
+        try {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          await new Promise((ok, bad) => { img.onload = ok; img.onerror = () => bad(new Error(`${file.name} isn't an image the browser can read.`)); img.src = url; });
+          await Backend.guestUpload(token, $("#up-pass")?.value, { name: file.name, url, w: img.naturalWidth, h: img.naturalHeight, size: file.size });
+          $("#up-list").insertAdjacentHTML("beforeend", `<li>${icon.check}${esc(file.name)}</li>`);
+        } catch (err) {
+          $("#up-err").textContent = err.message;
+          break;
+        }
+      }
+    };
+    $("#up-file").onchange = (e) => send([...e.target.files]);
+    const drop = $("#up-drop");
+    drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+    drop.ondragleave = () => drop.classList.remove("over");
+    drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); send([...e.dataTransfer.files]); };
+  }
+
   /* ── photo grid ──────────────────────────────────────────── */
   function renderGrid() {
     const grid = $("#grid");
@@ -337,23 +432,38 @@
       new: (a, b) => time(b) - time(a),
       old: (a, b) => time(a) - time(b),
     };
+    const haystack = (i) => `${i.name} ${i.title} ${i.description || ""} ${i.keywords || ""}`.toLowerCase();
     state.shown = state.items
-      .filter((i) => (state.kind === "all" || i.type === state.kind) && (!state.query || i.name.toLowerCase().includes(state.query)))
+      .filter((i) => (state.kind === "all" || i.type === state.kind) && (!state.query || haystack(i).includes(state.query)))
       .sort(sorters[state.sort]);
 
     grid.innerHTML = state.shown.map((it, i) => `
-      <figure class="ph" data-i="${i}" tabindex="0" aria-label="${esc(it.title)}">
+      <figure class="ph" data-i="${i}" tabindex="0" style="--r:${ratioOf(it).toFixed(4)}" aria-label="${esc(it.title)}">
         <img src="${D.thumb(it, 640)}" alt="${esc(it.title)}" loading="lazy" referrerpolicy="no-referrer">
         ${it.type === "video" ? `<span class="ph-badge">${icon.play}${it.duration ? fmtDuration(it.duration) : "Video"}</span>` : ""}
         ${it.visibility ? visBadge(it.visibility) : ""}
         <figcaption>
           <span>${esc(it.title)}</span>
-          ${C.allowDownloads ? `<a class="ph-dl" href="${D.downloadUrl(it)}" target="_blank" rel="noopener" title="Download" aria-label="Download ${esc(it.title)}">${icon.download}</a>` : ""}
+          ${canDownload() ? `<a class="ph-dl" href="${D.downloadUrl(it)}" target="_blank" rel="noopener" title="Download" aria-label="Download ${esc(it.title)}">${icon.download}</a>` : ""}
         </figcaption>
       </figure>`).join("") ||
       (state.items.length ? `<p class="empty">Nothing matches that filter.</p>` : "");
     stripBuiltFor = null;
     layoutGrid();
+    setPreview(state.shown.findIndex((i) => i.type === "image"));
+  }
+
+  // "SmugMug" gallery style: thumbnails on the left, one big photo on the right.
+  function setPreview(i) {
+    const box = $("#sm-preview");
+    const it = state.shown[i];
+    if (!box) return;
+    if (!it) { box.innerHTML = ""; delete box.dataset.i; return; }
+    box.dataset.i = i;
+    box.innerHTML = `<img src="${D.thumb(it, 1280)}" alt="${esc(it.title)}" referrerpolicy="no-referrer">
+      <p>${esc(it.title)}${it.description ? ` — ${esc(it.description)}` : ""}</p>`;
+    $("#grid .ph.on")?.classList.remove("on");
+    $(`#grid .ph[data-i="${i}"]`)?.classList.add("on");
   }
 
   // Justified layout: pack photos into rows, then scale each row so it
@@ -361,7 +471,7 @@
   function layoutGrid() {
     const grid = $("#grid");
     const els = grid ? grid.querySelectorAll(".ph[data-i]") : [];
-    if (!els.length) return;
+    if (!els.length || settings().style !== "collage-landscape") return; // other styles are pure CSS
     const css = getComputedStyle(grid);
     const width = grid.clientWidth - 0.5;
     const gap = parseFloat(css.columnGap) || 6;
@@ -392,7 +502,13 @@
   view.addEventListener("click", (e) => {
     if (e.target.closest(".ph-dl")) return;
     const ph = e.target.closest(".ph[data-i]");
-    if (ph) openAt(Number(ph.dataset.i));
+    if (ph) {
+      const i = Number(ph.dataset.i);
+      const sideBySide = $("#sm-preview") && innerWidth > 760 && state.shown[i].type === "image";
+      return sideBySide ? setPreview(i) : openAt(i);
+    }
+    const preview = e.target.closest("#sm-preview");
+    if (preview && preview.dataset.i) openAt(Number(preview.dataset.i));
   });
   view.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.matches?.(".ph[data-i]")) openAt(Number(e.target.dataset.i));
@@ -473,13 +589,15 @@
       const hi = new Image();
       hi.referrerPolicy = "no-referrer";
       hi.onload = () => { if (state.lb === i && state.shown[i] === it) img.src = hi.src; };
-      hi.src = D.thumb(it, C.lightboxSize || 2000);
+      hi.src = D.thumb(it, bigSize());
       stage.append(img);
     }
 
     $("#lb-count").textContent = `${i + 1} / ${state.shown.length}`;
     $("#lb-title").textContent = it.title;
-    if ($("#lb-dl")) $("#lb-dl").href = D.downloadUrl(it);
+    if ($("#lb-dl")) { $("#lb-dl").href = D.downloadUrl(it); $("#lb-dl").hidden = !canDownload(); }
+    $("#lb-share").hidden = !settings().sharing;
+    $("#lb-play").hidden = !settings().slideshow;
     $("#lb-prev").disabled = i === 0;
     $("#lb-next").disabled = i === state.shown.length - 1;
     renderInfo(it);
@@ -495,7 +613,7 @@
     // warm the cache for the neighbours
     [i + 1, i - 1].forEach((n) => {
       const nb = state.shown[n];
-      if (nb && nb.type === "image") { const p = new Image(); p.referrerPolicy = "no-referrer"; p.src = D.thumb(nb, C.lightboxSize || 2000); }
+      if (nb && nb.type === "image") { const p = new Image(); p.referrerPolicy = "no-referrer"; p.src = D.thumb(nb, bigSize()); }
     });
   }
 
@@ -505,6 +623,7 @@
       ["Taken", fmtDate(it.date)],
       ["Size", [it.w && it.h && `${it.w} × ${it.h}`, it.size && fmtBytes(it.size)].filter(Boolean).join("  ·  ")],
       ["Length", it.duration ? fmtDuration(it.duration) : ""],
+      ["Keywords", it.keywords],
       ["Camera", it.camera],
       ["Lens", it.lens],
       ["Settings", [
@@ -553,10 +672,19 @@
   $("#lb-next").onclick = () => step(1);
   $("#lb-play").onclick = () => toggleSlideshow();
   $("#lb-share").onclick = () => share(state.shown[state.lb]?.title);
+  // Photo details panel. Open by default on big screens; remembers your choice.
+  const showInfo = (on) => {
+    $("#lb-info").hidden = !on;
+    $("#lb-info-btn").classList.toggle("on", on);
+    lb.classList.toggle("with-info", on);
+  };
+  let infoPref = null;
+  try { infoPref = localStorage.getItem("dg:info"); } catch {}
+  showInfo(infoPref ? infoPref === "1" : innerWidth >= 1000);
   $("#lb-info-btn").onclick = () => {
-    const p = $("#lb-info");
-    p.hidden = !p.hidden;
-    $("#lb-info-btn").classList.toggle("on", !p.hidden);
+    const on = $("#lb-info").hidden;
+    showInfo(on);
+    try { localStorage.setItem("dg:info", on ? "1" : "0"); } catch {}
   };
   $("#lb-full").onclick = () => (document.fullscreenElement ? document.exitFullscreen() : lb.requestFullscreen?.());
   $("#lb-strip").onclick = (e) => { if (e.target.dataset.i) openAt(Number(e.target.dataset.i)); };
@@ -592,7 +720,8 @@
       state.folderId = null; // gallery pages reload when we come back
       return window.Organizer.open(decodeURIComponent(hash.split("/")[2] || "") || D.rootId);
     }
-    if (D.demo && hash.startsWith("#/s/")) { // an access link
+    if (D.demo && hash.startsWith("#/u/")) { hideLightbox(); return renderUpload(decodeURIComponent(hash.slice(4))); } // an upload link
+    if (D.demo && hash.startsWith("#/s/")) { // a view link
       try {
         const folderId = await Backend.redeemLink(decodeURIComponent(hash.slice(4)));
         state.folderId = null;
