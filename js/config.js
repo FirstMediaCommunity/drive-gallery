@@ -1,13 +1,13 @@
-﻿/*
- * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
- *  GALLERY CONFIG â€” this is the only file you need to edit.
- * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/*
+ * ─────────────────────────────────────────────────────────────
+ *  GALLERY CONFIG — this is the only file you need to edit.
+ * ─────────────────────────────────────────────────────────────
  *  Leave googleApiKey / rootFolderId empty to run in DEMO MODE
  *  (placeholder photos, no Google account needed).
  *  See README.md for the 5-minute setup.
  */
 window.GALLERY_CONFIG = {
-  // â”€â”€ Branding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Branding ───────────────────────────────────────────────
   siteTitle: "Pearadox 5414",
   tagline: "Team photo library",
   logo: "assets/logo.svg",          // path or URL to a logo image ("" = text only)
@@ -17,23 +17,23 @@ window.GALLERY_CONFIG = {
     { label: "Portal", url: "https://portal.pearadox5414.org/dashboard" },
   ],
 
-  // â”€â”€ Google Drive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Google Drive ───────────────────────────────────────────
   // API key from Google Cloud Console with the "Google Drive API" enabled.
   // It is safe to commit IF you restrict it to your website (see README).
   googleApiKey: "",
 
   // The ID of the Drive folder that holds everything. It's the last part
   // of the folder URL: https://drive.google.com/drive/folders/<THIS_PART>
-  // The folder must be shared as "Anyone with the link â†’ Viewer".
+  // The folder must be shared as "Anyone with the link → Viewer".
   rootFolderId: "",
 
-  // OPTIONAL â€” private galleries. Leave "" for a public gallery.
+  // OPTIONAL — private galleries. Leave "" for a public gallery.
   // If you set an OAuth Client ID here, visitors must "Sign in with Google"
   // and only see the gallery if the Drive folder is shared with their account.
-  // (Then the folder does NOT need to be public.) See README â†’ Private mode.
+  // (Then the folder does NOT need to be public.) See README → Private mode.
   googleClientId: "",
 
-  // â”€â”€ Look & feel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Look & feel ────────────────────────────────────────────
   theme: {
     brand: "#3d5b25",      // top bar + buttons
     accent: "#5abf34",     // highlights, hover states
