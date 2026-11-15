@@ -27,12 +27,6 @@ window.GALLERY_CONFIG = {
   // The folder must be shared as "Anyone with the link → Viewer".
   rootFolderId: "",
 
-  // OPTIONAL — private galleries. Leave "" for a public gallery.
-  // If you set an OAuth Client ID here, visitors must "Sign in with Google"
-  // and only see the gallery if the Drive folder is shared with their account.
-  // (Then the folder does NOT need to be public.) See README → Private mode.
-  googleClientId: "",
-
   // ── Look & feel ────────────────────────────────────────────
   theme: {
     brand: "#3d5b25",      // top bar + buttons

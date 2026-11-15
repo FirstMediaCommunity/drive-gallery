@@ -35,6 +35,22 @@
     sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>'),
     external: svg('<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'),
     search: svg('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>'),
+    lock: svg('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'),
+    link: svg('<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.700 1.700"/><path d="M14 11a5 5 0 0 0-7.500-.5l-3 3a5 5 0 0 0 7 7l1.700-1.700"/>'),
+    globe: svg('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/>'),
+    plus: svg('<path d="M12 5v14M5 12h14"/>'),
+    gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.400 15a1.700 1.700 0 0 0 .3 1.800l.1.100a2 2 0 1 1-2.800 2.800l-.1-.1a1.700 1.700 0 0 0-2.800 1.200V21a2 2 0 1 1-4 0v-.1A1.700 1.700 0 0 0 9 19.400a1.700 1.700 0 0 0-1.800.3l-.1.100a2 2 0 1 1-2.800-2.800l.1-.1a1.700 1.700 0 0 0-1.200-2.800H3a2 2 0 1 1 0-4h.1A1.700 1.700 0 0 0 4.600 9a1.700 1.700 0 0 0-.3-1.800l-.1-.1a2 2 0 1 1 2.800-2.800l.1.100a1.700 1.700 0 0 0 1.800.3H9a1.700 1.700 0 0 0 1-1.500V3a2 2 0 1 1 4 0v.1a1.700 1.700 0 0 0 1 1.500 1.700 1.700 0 0 0 1.800-.3l.1-.1a2 2 0 1 1 2.800 2.800l-.1.100a1.700 1.700 0 0 0-.3 1.800V9a1.700 1.700 0 0 0 1.500 1H21a2 2 0 1 1 0 4h-.1a1.700 1.700 0 0 0-1.500 1z"/>'),
+    trash: svg('<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>'),
+    folder: svg('<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.900a2 2 0 0 1-1.700-.9L9.600 3.900A2 2 0 0 0 7.900 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>'),
+    images: svg('<rect x="6" y="6" width="16" height="14" rx="2"/><path d="M2 16V6a2 2 0 0 1 2-2h12M22 16l-3.500-3.500a2 2 0 0 0-2.800 0L10 18"/><circle cx="11" cy="11" r="1.500"/>'),
+    move: svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+    star: svg('<path d="m12 2 3.100 6.300 6.900 1-5 4.900 1.200 6.800-6.200-3.200L5.800 21 7 14.200 2 9.300l6.900-1z"/>'),
+    upload: svg('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>'),
+    check: svg('<path d="M20 6 9 17l-5-5"/>'),
+    eye: svg('<path d="M2 12s3.500-7 10-7 10 7 10 7-3.500 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+    home: svg('<path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>'),
+    chevron: svg('<path d="m9 18 6-6-6-6"/>'),
+    copy: svg('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
   };
 
   const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
@@ -72,7 +88,7 @@
   const state = {
     folderId: null, folder: null, folders: [], items: [],
     shown: [],            // items after filter + sort (what the grid and viewer use)
-    sort: "name", query: "", kind: "all",
+    sort: D.demo ? "manual" : "name", query: "", kind: "all",
     lb: -1, lbPushed: false, slideshow: null,
   };
 
@@ -95,7 +111,9 @@
 
     $("#topnav").innerHTML =
       (C.links || []).map((l) => `<a href="${esc(l.url)}">${esc(l.label)}</a>`).join("") +
+      `<span id="auth-area" class="auth-area"></span>` +
       `<button class="icon-btn" id="theme-toggle" title="Toggle dark mode" aria-label="Toggle dark mode"></button>`;
+    paintAuth();
     const toggle = $("#theme-toggle");
     const paint = () => (toggle.innerHTML = root.dataset.theme === "dark" ? icon.sun : icon.moon);
     paint();
@@ -109,6 +127,50 @@
       `<span>© ${new Date().getFullYear()} ${esc(C.siteTitle)}</span>` +
       (C.repoUrl ? `<a href="${esc(C.repoUrl)}" target="_blank" rel="noopener">Powered by Drive Gallery</a>` : "");
     $("#demo-banner").hidden = !D.demo;
+  }
+
+  // Top-bar login area. Logins only exist in demo mode (see js/auth.js).
+  function paintAuth() {
+    const area = $("#auth-area");
+    if (!area || !D.demo) return;
+    const u = Auth.user();
+    area.innerHTML = u
+      ? (Auth.can("organize") ? `<a href="#/organize" class="nav-organize">Organize</a>` : "") +
+        `<span class="user-chip" title="Signed in as ${esc(u.username)}">${esc(u.name)}</span>` +
+        `<button class="link-btn" id="logout">Log out</button>`
+      : `<a href="#/login">Log in</a>`;
+    if (u) $("#logout").onclick = () => Auth.logout();
+  }
+
+  const visBadge = (v) =>
+    v === "internal" ? `<span class="badge badge-internal">${icon.lock}Internal</span>`
+    : v === "unlisted" ? `<span class="badge badge-unlisted">${icon.link}Unlisted</span>`
+    : v === "public" ? `<span class="badge badge-public">${icon.globe}Public</span>` : "";
+
+  function renderLogin() {
+    state.folderId = null;
+    document.title = `Log in · ${C.siteTitle}`;
+    view.innerHTML = `
+      <form class="notice login" id="login-form" autocomplete="on">
+        <h1>Team log in</h1>
+        <p>Log in to see internal galleries. Organizers also get the Organize screen.</p>
+        <label>Username<input id="login-user" name="username" autocomplete="username" required autofocus></label>
+        <label>Password<input id="login-pass" name="password" type="password" autocomplete="current-password" required></label>
+        <button class="btn btn-primary" type="submit">Log in</button>
+        <p class="notice-err" id="login-err" role="alert"></p>
+      </form>`;
+    $("#login-form").onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        await Auth.login($("#login-user").value, $("#login-pass").value);
+        const back = sessionStorage.getItem("dg:return-to") || "#/";
+        sessionStorage.removeItem("dg:return-to");
+        location.hash = back;
+      } catch (err) {
+        $("#login-err").textContent = err.message;
+        $("#login-pass").value = "";
+      }
+    };
   }
 
   /* ── folder page ─────────────────────────────────────────── */
@@ -151,6 +213,7 @@
         <div class="hero-bg" id="hero-bg"></div>
         <div class="hero-inner">
           ${!isRoot && parent ? `<p class="hero-kicker">${esc(parent)}</p>` : ""}
+          ${!isRoot && folder.visibility && folder.visibility !== "public" ? `<p class="hero-badge">${visBadge(folder.visibility)}</p>` : ""}
           <h1>${esc(folder.name)}</h1>
           ${folder.description ? `<p class="hero-desc">${esc(folder.description)}</p>` : ""}
           ${meta ? `<p class="hero-meta">${meta}</p>` : ""}
@@ -170,11 +233,12 @@
                 <button data-kind="all" class="on">All</button><button data-kind="image">Photos</button><button data-kind="video">Videos</button>
               </div>` : ""}
             ${items.length > 1 ? `<select id="sort" aria-label="Sort">
-                <option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option>
+                ${D.demo ? `<option value="manual">Gallery order</option>` : ""}<option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option>
                 <option value="new">Newest first</option><option value="old">Oldest first</option>
               </select>` : ""}
             ${photos > 1 ? `<button class="btn" id="slideshow">${icon.play}<span>Slideshow</span></button>` : ""}
             <button class="btn" id="share">${icon.share}<span>Share</span></button>
+            ${D.demo && Auth.can("organize") ? `<a class="btn" href="#/organize/${esc(folder.id)}">${icon.gear}<span>Organize</span></a>` : ""}
             ${C.showDriveLink && !D.demo ? `<a class="btn" href="${D.folderUrl(folder.id)}" target="_blank" rel="noopener">${icon.external}<span>Open in Drive</span></a>` : ""}
           </div>
         </div>
@@ -230,21 +294,20 @@
 
   const tileHtml = (f) => `
     <a class="tile" id="tile-${esc(f.id)}" href="${hashFor(f.id)}">
-      <div class="tile-img"></div>
+      <div class="tile-frame"><div class="tile-img"></div>${f.visibility && f.visibility !== "public" ? visBadge(f.visibility) : ""}</div>
       <div class="tile-body"><h3>${esc(f.name)}</h3><p class="tile-meta">&nbsp;</p></div>
     </a>`;
 
   function renderError(err) {
-    if (err.status === 401 && D.auth.enabled) {
+    if (D.demo) {
+      const locked = err.status === 403 && !Auth.user();
+      if (locked) sessionStorage.setItem("dg:return-to", location.hash);
       view.innerHTML = `
         <div class="notice">
-          <h1>${esc(C.siteTitle)}</h1>
-          <p>This gallery is private. Sign in with a Google account that has access to the photo folder.</p>
-          <button class="btn btn-primary" id="signin">Sign in with Google</button>
-          <p class="notice-err" id="signin-err"></p>
+          <h1>${locked ? "Team members only" : err.status === 403 ? "No access" : "Not found"}</h1>
+          <p>${esc(err.message)}</p>
+          ${locked ? `<a class="btn btn-primary" href="#/login">Log in</a>` : `<a class="btn" href="#/">Back to home</a>`}
         </div>`;
-      $("#signin").onclick = () =>
-        D.auth.signIn().then(() => loadFolder(state.folderId)).catch((e) => ($("#signin-err").textContent = e.message));
       return;
     }
     const hint =
@@ -268,6 +331,7 @@
     if (!grid) return;
     const time = (i) => (i.date ? Date.parse(i.date) || 0 : 0);
     const sorters = {
+      manual: () => 0, // keep the order the organizer set
       name: D.sortNatural,
       "name-desc": (a, b) => D.sortNatural(b, a),
       new: (a, b) => time(b) - time(a),
@@ -281,6 +345,7 @@
       <figure class="ph" data-i="${i}" tabindex="0" aria-label="${esc(it.title)}">
         <img src="${D.thumb(it, 640)}" alt="${esc(it.title)}" loading="lazy" referrerpolicy="no-referrer">
         ${it.type === "video" ? `<span class="ph-badge">${icon.play}${it.duration ? fmtDuration(it.duration) : "Video"}</span>` : ""}
+        ${it.visibility ? visBadge(it.visibility) : ""}
         <figcaption>
           <span>${esc(it.title)}</span>
           ${C.allowDownloads ? `<a class="ph-dl" href="${D.downloadUrl(it)}" target="_blank" rel="noopener" title="Download" aria-label="Download ${esc(it.title)}">${icon.download}</a>` : ""}
@@ -518,6 +583,23 @@
 
   /* ── router ──────────────────────────────────────────────── */
   async function route() {
+    const hash = location.hash;
+    document.body.classList.toggle("organizing", hash.startsWith("#/organize"));
+
+    if (D.demo && hash === "#/login") { hideLightbox(); return renderLogin(); }
+    if (D.demo && hash.startsWith("#/organize")) {
+      hideLightbox();
+      state.folderId = null; // gallery pages reload when we come back
+      return window.Organizer.open(decodeURIComponent(hash.split("/")[2] || "") || D.rootId);
+    }
+    if (D.demo && hash.startsWith("#/s/")) { // an access link
+      try {
+        const folderId = await Backend.redeemLink(decodeURIComponent(hash.slice(4)));
+        state.folderId = null;
+        history.replaceState(null, "", hashFor(folderId));
+      } catch (err) { state.folderId = null; return renderError(err); }
+    }
+
     const m = location.hash.match(/^#\/f\/([^/]+)(?:\/p\/([^/]+))?/);
     const folderId = m ? decodeURIComponent(m[1]) : D.rootId;
     const photoId = m && m[2] ? decodeURIComponent(m[2]) : null;
@@ -532,7 +614,16 @@
     else hideLightbox();
   }
 
+  // Shared with js/organize.js
+  window.App = { $, esc, icon, toast, plural, fmtDate, hashFor, visBadge, view };
+
   initChrome();
+  Auth.onChange(() => {
+    paintAuth();
+    state.folderId = null; // what's visible depends on who is logged in
+    if (!Auth.user() && location.hash.startsWith("#/organize")) location.hash = "#/";
+    else route();
+  });
   window.addEventListener("hashchange", route);
   window.addEventListener("popstate", route);
   route();

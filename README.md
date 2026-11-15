@@ -9,7 +9,9 @@ Your photos stay in Google Drive. The website just reads the folder and shows it
 - **Full-screen viewer** with keyboard arrows, swipe, filmstrip, slideshow, photo info (camera, lens, settings), share links and downloads.
 - **Videos** play right in the viewer.
 - **Filter, sort, light/dark mode**, and it works on phones.
-- **No build step, no server, no database, no frameworks.** Three small JavaScript files you can read in one sitting.
+- **Organize screen** *(preview)* — a SmugMug-style backend for people with the right permission: create galleries and folders, drag to reorder or move, set covers, choose who can see what, and make access links.
+- **Public / Unlisted / Internal** visibility per gallery, and per photo — without ever duplicating a file.
+- **No build step, no frameworks.** A handful of small JavaScript files you can read in one sitting.
 
 Built by [FRC Team 5414 Pearadox](https://pearadox5414.org) for our own media library. Free for any team, club, school or family to copy.
 
@@ -33,6 +35,22 @@ python3 -m http.server 4173
 
 Then open <http://localhost:4173>.
 
+### Demo accounts
+
+Demo mode has three kinds of visitor so you can see what each one gets. Click **Log in** in the top bar.
+
+| Who | Username | Password | Sees |
+| --- | --- | --- | --- |
+| Public visitor | *(don't log in)* | | Public galleries, plus photos pinned "Always public" |
+| Team member | `member` | `pear-member-5414` | Everything, including Internal and Unlisted galleries |
+| Organizer | `organizer` | `pear-organizer-5414` | Everything, plus the **Organize** screen |
+
+Things to try as the organizer: create a gallery, drag photos to reorder them, drag a gallery onto a folder in the sidebar, set a gallery to Internal and then log out to watch it disappear, pin one photo in an internal gallery as "Always public", and create an access link under **Share**.
+
+Changes you make are saved in your own browser only. **Reset demo** in the Organize toolbar puts everything back.
+
+> **These logins are a demonstration, not security.** They run in the browser, so anyone technical can get around them — which is fine, because the demo only contains placeholder photos. To protect real photos, the login and the permission checks must run on a server. [docs/BACKEND.md](docs/BACKEND.md) explains exactly what to replace and how.
+
 ---
 
 ## Set it up with your own photos
@@ -50,7 +68,7 @@ Click **Use this template** (or **Fork**) at the top of this repo.
 3. Open the folder and copy the ID from the address bar — the part after `/folders/`:
    `https://drive.google.com/drive/folders/`**`1AbCdEfGhIjKlMnOpQrStUvWxYz`**
 
-> **Heads up:** "Anyone with the link" means anyone who finds your website can see these photos. If you need the gallery to be members-only, use [private mode](#private-mode-sign-in-with-google) instead.
+> **Heads up:** "Anyone with the link" means anyone who finds your website can see these photos. If you need the gallery to be members-only, see [Logins, private galleries and the Organize screen](#logins-private-galleries-and-the-organize-screen).
 
 ### 3. Get a Google API key (free)
 
@@ -96,20 +114,25 @@ New uploads show up on their own — visitors may need to wait up to `cacheMinut
 
 ---
 
-## Private mode (sign in with Google)
+## Logins, private galleries and the Organize screen
 
-If your photos shouldn't be public, set `googleClientId` in `js/config.js`. Visitors then get a **Sign in with Google** button and only see the gallery if the Drive folder has been shared with their Google account — so you control access the normal way, from Drive's Share dialog. The folder does **not** need to be public.
+The live Drive mode above is public and read-only: it shows a publicly shared folder to everyone, with no logins and no Organize screen.
 
-1. In Google Cloud Console: **APIs & Services → OAuth consent screen** — set it up (choose *Internal* if you have Google Workspace, otherwise *External* and add your members as test users).
-2. **Credentials → Create credentials → OAuth client ID → Web application**. Under *Authorized JavaScript origins* add your site (`https://yourname.github.io`) and `http://localhost:4173`.
-3. Paste the client ID into `googleClientId`.
+Logins, Internal/Unlisted galleries, access links and the Organize screen need a server that knows who is logged in. This repo ships them as a **working preview** on top of a pretend, in-browser server so you can click through the whole experience (see [Demo accounts](#demo-accounts)). To make them real, replace two files — `js/auth.js` and `js/backend.js` — with calls to your own login system and API. Nothing else changes.
 
-Things to know:
+**[docs/BACKEND.md](docs/BACKEND.md)** is the handoff guide: the five login functions, an endpoint for every backend function, how to serve private Drive files without making them public, and a security checklist.
 
-- The site asks for read-only Drive access (`drive.readonly`). The access token stays in the visitor's browser tab and is never sent anywhere except Google.
-- Google treats Drive scopes as sensitive: an *External* app that hasn't been through Google's verification shows an "unverified app" warning and is limited to 100 test users. *Internal* (Workspace) apps have no such limits.
-- Videos and downloads open through Drive itself, so the visitor must be signed in to the same Google account in their browser.
-- **This mode is newer and less tested than public mode.** Please open an issue if something misbehaves.
+### No more duplicate files
+
+A common setup keeps an "internal" copy and a "public" copy of the same photo. Here every file is stored once, and visibility is just a setting on it:
+
+| Setting | On a gallery | On a single photo |
+| --- | --- | --- |
+| **Public** | Listed for everyone | Shown publicly even inside an internal gallery |
+| **Unlisted** | Hidden from listings; anyone with the link can open it | — |
+| **Internal** | Logged-in team members only | Hidden publicly even inside a public gallery |
+
+Public visitors and team members look at the same library through a different filter, so "make this public" flips a setting instead of copying a file.
 
 ---
 
@@ -119,8 +142,12 @@ Things to know:
 index.html      page shell
 css/style.css   all styling (colors are CSS variables at the top)
 js/config.js    your settings  ← the only file you need to edit
-js/drive.js     talks to the Google Drive API (and provides the demo library)
-js/app.js       the interface: folder pages, photo grid, viewer, URL routing
+js/drive.js     reads a public Google Drive folder (live mode)
+js/app.js       the gallery: folder pages, photo grid, viewer, URL routing
+js/organize.js  the Organize screen
+js/auth.js      DEMO login and roles          ← replace with your login
+js/backend.js   DEMO server (in the browser)  ← replace with your API
+docs/BACKEND.md how to do those two replacements
 serve.ps1       optional local preview server for Windows
 ```
 
