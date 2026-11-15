@@ -112,12 +112,38 @@
     if (t.highlight) root.style.setProperty("--highlight", t.highlight);
     if (C.rowHeight) root.style.setProperty("--row-h", C.rowHeight + "px");
 
+    // Pick black or white text for each brand color, whichever reads better.
+    const probe = document.createElement("canvas").getContext("2d");
+    const rgbOf = (color) => {
+      probe.fillStyle = "#000"; probe.fillStyle = color; // the canvas normalises any CSS color
+      probe.fillRect(0, 0, 1, 1);
+      return probe.getImageData(0, 0, 1, 1).data;
+    };
+    const readableOn = (color) => {
+      const [r, g, b] = [...rgbOf(color)].slice(0, 3).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#111" : "#fff";
+    };
+    const css = getComputedStyle(root);
+    for (const name of ["brand", "accent", "highlight"]) {
+      root.style.setProperty(`--on-${name}`, readableOn(css.getPropertyValue(`--${name}`).trim()));
+    }
+
+    // No logo file? Draw a badge from logoText (or the title's initials) in the brand color.
+    const initials = (C.logoText || C.siteTitle.split(/\s+/).map((w) => w[0]).join("")).slice(0, 4).toUpperCase();
+    const brand = css.getPropertyValue("--brand").trim();
+    const badge = "data:image/svg+xml," + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${brand}"/>` +
+      `<text x="32" y="33" text-anchor="middle" dominant-baseline="central" font-family="system-ui,Segoe UI,Arial,sans-serif" font-weight="700" ` +
+      `font-size="${initials.length > 3 ? 19 : initials.length > 2 ? 24 : 30}" fill="${readableOn(brand)}">${esc(initials)}</text></svg>`);
+    const logoUrl = C.logo || badge;
+    $('link[rel="icon"]').href = logoUrl;
+
     let mode = t.defaultMode || "light";
     try { mode = localStorage.getItem("dg:theme") || mode; } catch {}
     root.dataset.theme = mode;
 
     $("#brand").innerHTML =
-      (C.logo ? `<img src="${esc(C.logo)}" alt="">` : "") +
+      (C.logo ? `<img src="${esc(C.logo)}" alt="">` : "") + // (with no logo file, the title alone is the wordmark)
       `<span class="brand-name">${esc(C.siteTitle)}</span>` +
       (C.tagline ? `<span class="brand-sub">${esc(C.tagline)}</span>` : "");
 

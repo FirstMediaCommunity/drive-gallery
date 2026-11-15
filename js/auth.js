@@ -29,8 +29,8 @@
   // plain text. (The demo passwords are listed in the README.)
   const SALT = "drive-gallery-demo";
   const USERS = [
-    { username: "member",    name: "Demo Member",    role: "member",    hash: "1f0b3c7196d5fb247a01a9e256a8ba51080efad76db0de2a842a1fb6ef0d211b" },
-    { username: "organizer", name: "Demo Organizer", role: "organizer", hash: "38e897e82c177dae071b995e8202cab6ffbdd0bd58f577b47ff9e5b3585bf809" },
+    { username: "member",    name: "Demo Member",    role: "member",    hash: "aa063fe2480c44e5dd2fff668f1bdc6e192591aa86fb5296b34e1044bfa84533" },
+    { username: "organizer", name: "Demo Organizer", role: "organizer", hash: "6e3de0fcb7ed8af274057b1b5ff5000b6f9818a600e466e5679aeebd4d900455" },
   ];
 
   const SESSION_KEY = "dg:session";

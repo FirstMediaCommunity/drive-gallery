@@ -2,7 +2,7 @@
 
 The site in this repo is a **working preview**. The gallery pages and the Organize screen are real; the login and the "server" behind them are stand-ins that run in the browser so the whole thing can be clicked through without any infrastructure.
 
-This page is for whoever wires it to a real login system and real storage (for Pearadox: the member portal).
+This page is for whoever wires it to a real login system and real storage — for example a team's existing member portal.
 
 ## What is real and what is pretend
 
@@ -33,7 +33,7 @@ Auth.onChange(fn)      // call fn after login/logout
 For a portal with its own login page, the simplest swap is:
 
 - `Auth.user()` returns what `GET /api/me` said (fetch once at page load, keep in memory).
-- `Auth.login()` redirects to the portal's login with a `returnTo`, the way media.pearadox5414.org does today.
+- `Auth.login()` redirects to the portal's login with a `returnTo` address to come back to.
 - The session lives in an `HttpOnly`, `Secure`, `SameSite` cookie set by the portal. No tokens in `localStorage`.
 
 `Auth.can()` only decides which buttons to **show**. The server decides what is **allowed**.

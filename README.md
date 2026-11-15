@@ -13,7 +13,26 @@ Your photos stay in Google Drive. The website just reads the folder and shows it
 - **Public / Unlisted / Internal** visibility per gallery, and per photo — without ever duplicating a file.
 - **No build step, no frameworks.** A handful of small JavaScript files you can read in one sitting.
 
-Built by [FRC Team 5414 Pearadox](https://pearadox5414.org) for our own media library. Free for any team, club, school or family to copy.
+Built by the FIRST Media Community. Free for any team, club, school or family to copy.
+
+**Live demo:** <https://firstmediacommunity.github.io/drive-gallery/>
+
+---
+
+## Make it yours
+
+All branding lives in one file, [`js/config.js`](js/config.js). Nothing else in the project mentions a name, logo or color.
+
+| To change | Edit in `js/config.js` |
+| --- | --- |
+| Site name and tagline | `siteTitle`, `tagline` |
+| Logo and browser-tab icon | Drop an image in `assets/` and set `logo: "assets/logo.png"`. With no logo, a badge is drawn from `logoText`. |
+| Colors | `theme.brand`, `theme.accent`, `theme.highlight` — text on top of them turns black or white automatically |
+| Light or dark by default | `theme.defaultMode` |
+| Top-bar links | `links` |
+| Footer credit link | `repoUrl` (or `""` to hide) |
+
+Save the file and refresh the page — that's the whole rebrand.
 
 ---
 
@@ -42,8 +61,8 @@ Demo mode has three kinds of visitor so you can see what each one gets. Click **
 | Who | Username | Password | Sees |
 | --- | --- | --- | --- |
 | Public visitor | *(don't log in)* | | Public galleries, plus photos pinned "Always public" |
-| Team member | `member` | `pear-member-5414` | Public and Internal galleries (Unlisted ones only by link, like everyone else) |
-| Organizer | `organizer` | `pear-organizer-5414` | Everything, plus the **Organize** screen |
+| Team member | `member` | `member-demo-pass` | Public and Internal galleries (Unlisted ones only by link, like everyone else) |
+| Organizer | `organizer` | `organizer-demo-pass` | Everything, plus the **Organize** screen |
 
 Things to try as the organizer: create a gallery, drag photos to reorder them, drag a gallery onto a folder in the sidebar, set a gallery to Internal and then log out to watch it disappear, pin one photo in an internal gallery as "Always public", and create an access link under **Share**.
 
@@ -105,10 +124,10 @@ siteTitle: "Your Team Name",
 tagline: "Photo library",
 googleApiKey: "AIza...your key...",
 rootFolderId: "1AbCdEfGhIjKlMnOpQrStUvWxYz",
-theme: { brand: "#3d5b25", accent: "#5abf34", highlight: "#e2a215", defaultMode: "light" },
+theme: { brand: "#1f2a44", accent: "#3b82f6", highlight: "#f59e0b", defaultMode: "light" },
 ```
 
-Swap `assets/logo.svg` for your own logo while you're there.
+Set your name, logo and colors in the same file — see [Make it yours](#make-it-yours).
 
 ### 5. Publish
 
