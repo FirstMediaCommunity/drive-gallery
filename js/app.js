@@ -179,6 +179,10 @@
       `<span>© ${new Date().getFullYear()} ${esc(C.siteTitle)}</span>` +
       (C.repoUrl ? `<a href="${esc(C.repoUrl)}" target="_blank" rel="noopener">Powered by Drive Gallery</a>` : "");
     $("#demo-banner").hidden = !D.demo;
+    // The demo logins are listed at the top of the repo's README.
+    const accounts = $("#demo-accounts-link");
+    if (C.repoUrl) { accounts.href = C.repoUrl + "#demo-accounts"; accounts.target = "_blank"; accounts.rel = "noopener"; }
+    else accounts.replaceWith("See the README for the demo logins.");
   }
 
   // Top-bar login area. Logins only exist in demo mode (see js/auth.js).
@@ -210,6 +214,7 @@
         <label>Password<input id="login-pass" name="password" type="password" autocomplete="current-password" required></label>
         <button class="btn btn-primary" type="submit">Log in</button>
         <p class="notice-err" id="login-err" role="alert"></p>
+        ${C.repoUrl ? `<p class="notice-hint">Trying the demo? <a href="${esc(C.repoUrl)}#demo-accounts" target="_blank" rel="noopener">The demo logins are here.</a></p>` : ""}
       </form>`;
     $("#login-form").onsubmit = async (e) => {
       e.preventDefault();

@@ -80,6 +80,7 @@ button, select, input { font: inherit; color: inherit; }
   background: color-mix(in srgb, var(--highlight) 18%, var(--surface));
   border-bottom: 1px solid var(--edge);
 }
+.demo-banner a, .login .notice-hint a { font-weight: 700; text-decoration: underline; }
 .demo-banner code { font-size: 12px; padding: 1px 5px; border-radius: 4px; background: rgb(0 0 0 / .08); }
 
 /* ── hero (cover image + title) ──────────────────────────── */

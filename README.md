@@ -17,6 +17,17 @@ Built by the FIRST Media Community. Free for any team, club, school or family to
 
 **Live demo:** <https://firstmediacommunity.github.io/drive-gallery/>
 
+## Demo accounts
+
+Click **Log in** in the demo's top bar and use one of these:
+
+| Who | Username | Password | Sees |
+| --- | --- | --- | --- |
+| Team member | `member` | `member-demo-pass` | Public and Internal galleries |
+| Organizer | `organizer` | `organizer-demo-pass` | Everything, plus the **Organize** screen |
+
+Don't log in at all to see what the public sees. These logins are for trying the demo only — see [What to try](#what-to-try) below.
+
 ---
 
 ## Make it yours
@@ -57,15 +68,15 @@ python3 -m http.server 4173
 
 Then open <http://localhost:4173>.
 
-### Demo accounts
+### What to try
 
-Demo mode has three kinds of visitor so you can see what each one gets. Click **Log in** in the top bar.
+Demo mode has three kinds of visitor so you can see what each one gets. The logins are in [Demo accounts](#demo-accounts) at the top of this page.
 
-| Who | Username | Password | Sees |
-| --- | --- | --- | --- |
-| Public visitor | *(don't log in)* | | Public galleries, plus photos pinned "Always public" |
-| Team member | `member` | `member-demo-pass` | Public and Internal galleries (Unlisted ones only by link, like everyone else) |
-| Organizer | `organizer` | `organizer-demo-pass` | Everything, plus the **Organize** screen |
+| Who | Sees |
+| --- | --- |
+| Public visitor *(not logged in)* | Public galleries, plus photos pinned "Always public" |
+| Team member | Public and Internal galleries (Unlisted ones only by link, like everyone else) |
+| Organizer | Everything, plus the **Organize** screen |
 
 Things to try as the organizer: create a gallery, drag photos to reorder them, drag a gallery onto a folder in the sidebar, set a gallery to Internal and then log out to watch it disappear, pin one photo in an internal gallery as "Always public", and create an access link under **Share**.
 
