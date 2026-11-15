@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Photo Gallery</title>
+  <meta name="description" content="Photo gallery powered by Google Drive">
+  <link rel="icon" href="assets/logo.svg">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/" id="brand"></a>
+    <nav class="topnav" id="topnav"></nav>
+  </header>
+
+  <div id="demo-banner" class="demo-banner" hidden>
+    Demo mode — these are placeholder photos. Add your Google Drive folder in
+    <code>js/config.js</code> to show your own.
+  </div>
+
+  <main id="view"></main>
+
+  <footer class="footer" id="footer"></footer>
+
+  <div id="lightbox" class="lb" hidden aria-modal="true" role="dialog" aria-label="Photo viewer"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/drive.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
