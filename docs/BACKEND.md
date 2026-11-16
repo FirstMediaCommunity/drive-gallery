@@ -16,7 +16,29 @@ This page is for whoever wires it to a real login system and real storage — fo
 
 Because the pretend parts run in the visitor's browser, **they are not security**. Anyone can open dev tools and read or change them. That is fine for placeholder photos and it is why the demo data is placeholders. With real photos, every rule below has to be enforced on the server.
 
-## The two files to replace
+## How much work this really is
+
+The browser side only talks to two files, `js/auth.js` and `js/backend.js`, so those are the only two files you **edit** in this repo. That is not the same as the amount of work. Behind them you have to build and run:
+
+- a login system (or a connection to an existing one), with sessions and rate limiting;
+- a database for galleries, items, visibility, order, links and passwords;
+- about twenty API endpoints, each checking who is asking;
+- a way to serve private photos and video from Drive (the hard part — see [Serving the actual files](#serving-the-actual-files-from-google-drive));
+- uploads that write into Drive;
+- hosting for all of it, and someone to maintain it.
+
+For an experienced developer this is a project of weeks, not an afternoon. If you already have a media site with its own login and storage, it is usually less work to borrow the look and the screens from this repo than to move onto it.
+
+### Not built at all
+
+These are missing from the demo too, not just from the pretend server:
+
+- **No review step.** Anything added to a Public gallery, including guest uploads through an upload link, is public immediately. If photos of students are involved you probably want uploads to land as "pending" until a person approves them.
+- **Uploads accept images only.** The upload page and the Organize upload button reject video.
+- **No tags or cross-gallery search.** A photo lives in exactly one gallery. Keywords are stored and shown but nothing searches across galleries by them. A tag-based library would treat an album as a saved tag search instead of a container.
+- **Live Drive mode has none of the above.** It is public and read-only.
+
+## The two files to edit
 
 ### 1. `js/auth.js`
 
@@ -40,7 +62,7 @@ For a portal with its own login page, the simplest swap is:
 
 ### 2. `js/backend.js`
 
-Every function maps to one endpoint. Shapes are exactly what the demo returns, so the UI needs no changes.
+Every function maps to one endpoint. If the endpoints return the same shapes the demo does, the UI should need no changes — that has only ever been run against the pretend server, so expect some adjusting.
 
 **Reading (anyone; the server filters by who is asking)**
 
@@ -74,9 +96,9 @@ Every function maps to one endpoint. Shapes are exactly what the demo returns, s
 
 Errors: throw an `Error` with a `status` (`403`, `404`, `400`) and a human-readable `message` — the UI shows the message as-is.
 
-## One file, many audiences (no more duplicates)
+## One record, many audiences
 
-Today, making something public copies the file so it exists on both the internal and the public site. This design never copies. **Visibility is a field on the record, not a location.**
+In this design **visibility is a field on the record, not a location.** That keeps the *records* from being duplicated. Whether the *file* also has to exist twice depends on how you serve it, which is a separate and harder question — see the next section.
 
 ```
 gallery.visibility   public | unlisted | internal
@@ -88,23 +110,31 @@ item.visibility      inherit | public | internal
 - **Internal** — logged-in members only.
 - An item normally **inherits** from its gallery, but can be pinned **public** (shows publicly even inside an internal gallery) or **internal** (hidden publicly even inside a public gallery).
 
-The public site and the internal site are the same records passed through one filter — `canSeeItem`, `isListed` and `canOpen` near the top of `js/backend.js` are that filter, about 20 lines, and can be ported directly. "Make public" becomes a one-field update; storage use does not change.
+The public site and the internal site are the same records passed through one filter — `canSeeItem`, `isListed` and `canOpen` near the top of `js/backend.js` are that filter, about 20 lines, and can be ported directly. "Make public" becomes a one-field update on the record.
 
-A gallery that is internal but contains pinned-public items shows up publicly with only those items in it. That replaces the "public copy" workflow: pick the few approved shots inside the internal gallery and pin them.
+A gallery that is internal but contains pinned-public items shows up publicly with only those items in it: pick the few approved shots inside the internal gallery and pin them.
 
 ## Serving the actual files from Google Drive
 
-Files stay in Drive, stored once. Two workable setups:
+This is where "store each file once" gets expensive. A browser can only load a Drive file directly if that file is shared publicly; otherwise the bytes have to pass through your server. Every option below trades something away, and none of them has been built or tested in this repo except B.
 
-**A. Server holds the keys (recommended for internal media).**
-Keep the Drive folder private. The server uses a Google service account that has been given Viewer access to the folder. For each image request the server checks the session and the visibility rule, then either streams the bytes from Drive (`files.get?alt=media`, or the `thumbnailLink` for small sizes) or redirects to a short-lived URL. Members never need a Google account, and nothing is reachable without passing the check. Cache thumbnails on the server or a CDN — Drive is slow and rate-limited if every tile is proxied live.
+**A. Server proxies everything.**
+Keep Drive private. The server uses a Google service account with Viewer access; for each request it checks the session and the visibility rule, then streams the bytes from Drive (`files.get?alt=media`, or `thumbnailLink` for small sizes). Nothing is reachable without passing the check and nothing is copied. The cost is bandwidth and compute: fine for thumbnails if you cache them, a real problem for video. A 100 MB video streamed through a free hosting tier will hit limits quickly.
 
-**B. Public files straight from Drive (what `js/drive.js` does today).**
-Share the folder as "Anyone with the link" and let browsers load thumbnails from Google directly. Zero server cost, but anything in that folder is effectively public to whoever has a file ID. Only suitable for media that is meant to be public.
+**B. Share the whole folder (what `js/drive.js` does today).**
+"Anyone with the link" on the root folder; browsers load everything from Google. No server cost, but nothing in that folder is private. Only for libraries that are entirely public.
 
-A reasonable split: setup A for everything, with public items additionally cacheable on a CDN because they need no session check.
+**C. Share only the public files.**
+Keep Drive private, and when an item becomes public have the server add an "anyone with the link" permission to that one file (`permissions.create`), removing it (`permissions.delete`) when the item goes back to internal. Public media, including video, then loads from Google; internal media goes through the proxy in A. No copy. Things to check before relying on it: a Workspace admin can forbid sharing outside the organisation, shared drives can restrict it too, and the server needs write access to permissions, not just Viewer. Untested here.
 
-To make `Drive.thumb()` use setup A, change one function in `js/drive.js` to return something like `/api/media/:id?w=640`.
+**D. Keep a managed public copy.**
+Copy public files to a separate public folder or bucket and serve them from there. Uses more storage, but the private drive is never exposed, video never touches your server, and "unpublish" is a delete. This is a legitimate choice, not a mistake to be fixed — especially where C is blocked by sharing policy.
+
+To point the gallery at your choice, change `Drive.thumb()` (and the download and video URLs next to it) in `js/drive.js`.
+
+### Large uploads
+
+The same bandwidth limit applies in the other direction. For video, have the server start a Drive resumable upload session and hand the session address to the browser, so the bytes go from the visitor straight to Google rather than through your host. Also untested here; the demo upload only pretends, and only accepts images.
 
 ## Where to keep the metadata
 
@@ -113,9 +143,11 @@ Names, order, visibility, covers and links need to live somewhere the server can
 - **Portal database** (best fit if the portal already has one): a `folders` table, an `items` table keyed by Drive file ID, a `links` table. The fields are exactly those in the seed data at the bottom of `js/backend.js`.
 - **Drive itself**, if you want zero extra storage: Drive files have a `properties` map (`files.update` with `properties: { visibility: "public" }`) and folders can be created/renamed/moved through the Drive API. Simpler to deploy, slower to query, and ordering is awkward.
 
-Either way, uploads from the Organize screen should go to the server, which writes the file into the right Drive folder with the service account and records the item.
+Either way, uploads from the Organize screen should be authorised by the server, end up in the right Drive folder, and be recorded as an item.
 
 ## Access links
+
+These let people without an account see or add photos, which matters a great deal when the photos are of students. Decide deliberately whether you want them at all. If you do, sensible defaults are: organizers only, always expiring, password required, and every use logged.
 
 There are two kinds, and they are deliberately separate:
 

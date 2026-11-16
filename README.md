@@ -10,7 +10,7 @@ Your photos stay in Google Drive. The website just reads the folder and shows it
 - **Videos** play right in the viewer.
 - **Filter, sort, light/dark mode**, and it works on phones.
 - **Organize screen** *(preview)* — a SmugMug-style backend for people with the right permission: create galleries and folders, drag to reorder or move, set covers, choose who can see what, and make access links.
-- **Public / Unlisted / Internal** visibility per gallery, and per photo — without ever duplicating a file.
+- **Public / Unlisted / Internal** visibility per gallery, and per photo *(preview)*.
 - **No build step, no frameworks.** A handful of small JavaScript files you can read in one sitting.
 
 Built by the FIRST Media Community. Free for any team, club, school or family to copy.
@@ -168,13 +168,22 @@ New uploads show up on their own — visitors may need to wait up to `cacheMinut
 
 The live Drive mode above is public and read-only: it shows a publicly shared folder to everyone, with no logins and no Organize screen.
 
-Logins, Internal/Unlisted galleries, access links and the Organize screen need a server that knows who is logged in. This repo ships them as a **working preview** on top of a pretend, in-browser server so you can click through the whole experience (see [Demo accounts](#demo-accounts)). To make them real, replace two files — `js/auth.js` and `js/backend.js` — with calls to your own login system and API. Nothing else changes.
+Logins, Internal/Unlisted galleries, access links and the Organize screen need a server that knows who is logged in. This repo ships them as a **working preview** on top of a pretend, in-browser server so you can click through the whole experience (see [Demo accounts](#demo-accounts)).
 
-**[docs/BACKEND.md](docs/BACKEND.md)** is the handoff guide: the five login functions, an endpoint for every backend function, how to serve private Drive files without making them public, and a security checklist.
+**Making them real is a proper project, not a config change.** In this repo you only edit two files, `js/auth.js` and `js/backend.js`, but behind them you need a login system, a database, around twenty API endpoints, a way to serve private files from Drive, and hosting for all of it. If you already run a media site with its own login, it is probably easier to borrow the look and screens from here than to switch to it.
 
-### No more duplicate files
+**[docs/BACKEND.md](docs/BACKEND.md)** is the handoff guide: what the work involves, the five login functions, an endpoint for every backend function, the options for serving private Drive files (and what each one costs), and a security checklist.
 
-A common setup keeps an "internal" copy and a "public" copy of the same photo. Here every file is stored once, and visibility is just a setting on it:
+### What the preview does not do
+
+- **No review step.** Anything added to a Public gallery, including guest uploads, is public straight away. Nobody approves it first.
+- **Uploads take images only**, not video.
+- **No tags.** A photo lives in one gallery; there is no search across galleries.
+- **View and upload links** let people without an account see or add photos. Think about whether that is right for photos of students before turning them on for real.
+
+### Visibility is a setting, not a folder
+
+Every photo has one record, and who can see it is a setting on that record:
 
 | Setting | On a gallery | On a single photo |
 | --- | --- | --- |
@@ -182,7 +191,9 @@ A common setup keeps an "internal" copy and a "public" copy of the same photo. H
 | **Unlisted** | Hidden from listings (from team members too); anyone with the link can open it | — |
 | **Internal** | Logged-in team members only | Hidden publicly even inside a public gallery |
 
-Public visitors and team members look at the same library through a different filter, so "make this public" flips a setting instead of copying a file.
+Public visitors and team members look at the same library through a different filter.
+
+Whether the file itself can also be stored just once depends on how a real server delivers it. Showing a private Drive file to the public means either sharing that file publicly, sending it through your own server (expensive for video), or keeping a public copy. [docs/BACKEND.md](docs/BACKEND.md#serving-the-actual-files-from-google-drive) lays out the trade-offs; none of them is free.
 
 ---
 
@@ -195,9 +206,9 @@ js/config.js    your settings  ← the only file you need to edit
 js/drive.js     reads a public Google Drive folder (live mode)
 js/app.js       the gallery: folder pages, photo grid, viewer, URL routing
 js/organize.js  the Organize screen
-js/auth.js      DEMO login and roles          ← replace with your login
-js/backend.js   DEMO server (in the browser)  ← replace with your API
-docs/BACKEND.md how to do those two replacements
+js/auth.js      DEMO login and roles          ← pretend; needs a real login
+js/backend.js   DEMO server (in the browser)  ← pretend; needs a real server
+docs/BACKEND.md what building the real versions involves
 serve.ps1       optional local preview server for Windows
 ```
 
