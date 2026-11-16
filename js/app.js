@@ -5,6 +5,7 @@
  *   #/                 → the root folder (home page)
  *   #/f/<folderId>     → a folder / gallery
  *   #/f/<id>/p/<file>  → a gallery with one photo open in the viewer
+ *   #/t/<tag>          → everything with one tag, from every gallery (demo backend only)
  *
  * Sections:  helpers → chrome (header/footer/theme) → folder page →
  *            photo grid → lightbox → router
@@ -50,6 +51,7 @@
     eye: svg('<path d="M2 12s3.500-7 10-7 10 7 10 7-3.500 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
     home: svg('<path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>'),
     chevron: svg('<path d="m9 18 6-6-6-6"/>'),
+    tag: svg('<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.800 0L3 13V3h10l7.600 7.600a2 2 0 0 1 0 2.800z"/><circle cx="7.500" cy="7.500" r="1.500"/>'),
     copy: svg('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
   };
 
@@ -61,8 +63,13 @@
   const fmtBytes = (b) => (b >= 1e9 ? (b / 1e9).toFixed(1) + " GB" : b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.round(b / 1e3) + " KB");
   const fmtDuration = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
   const ratioOf = (it) => (it.w && it.h ? it.w / it.h : it.type === "video" ? 16 / 9 : 1.5);
+  // A tag page behaves like a gallery whose id is "tag:<name>".
+  const TAG = "tag:";
+  const isTagPage = (id) => String(id).startsWith(TAG);
+  const tagHash = (tag) => `#/t/${encodeURIComponent(tag)}`;
   const hashFor = (folderId, photoId) =>
-    folderId === D.rootId && !photoId ? "#/" : `#/f/${folderId}${photoId ? "/p/" + photoId : ""}`;
+    isTagPage(folderId) ? tagHash(folderId.slice(TAG.length)) + (photoId ? "/p/" + photoId : "")
+    : folderId === D.rootId && !photoId ? "#/" : `#/f/${folderId}${photoId ? "/p/" + photoId : ""}`;
 
   let toastTimer;
   function toast(msg) {
@@ -241,7 +248,7 @@
     window.scrollTo(0, 0);
 
     try {
-      const [folder, listing, crumbs] = await Promise.all([D.folder(id), D.list(id), D.path(id)]);
+      const [folder, listing, crumbs] = isTagPage(id) ? await loadTag(id) : await Promise.all([D.folder(id), D.list(id), D.path(id)]);
       if (state.folderId !== id) return; // user navigated away while loading
       Object.assign(state, {
         folder, folders: listing.folders, items: listing.items,
@@ -254,12 +261,25 @@
     }
   }
 
+  // A tag page: everything this visitor may see that carries one tag, from
+  // every gallery. It is dressed up as a gallery so the same page, grid and
+  // viewer can show it.
+  async function loadTag(id) {
+    const { tag, items } = await Backend.byTag(id.slice(TAG.length));
+    const folder = {
+      id, name: tag, kind: "gallery", isTag: true,
+      description: "Photos and videos with this tag, from every gallery.",
+      settings: { coverImage: false, style: "collage-landscape" },
+    };
+    return [folder, { folders: [], items }, [{ id: D.rootId, name: C.siteTitle }, { id, name: tag }]];
+  }
+
   function renderFolder(crumbs) {
     const { folder, folders, items } = state;
     const isRoot = folder.id === D.rootId;
     const photos = items.filter((i) => i.type === "image").length;
     const videos = items.length - photos;
-    const parent = crumbs.length > 1 ? crumbs[crumbs.length - 2].name : "";
+    const parent = folder.isTag ? "Tag" : crumbs.length > 1 ? crumbs[crumbs.length - 2].name : "";
     const meta = [
       folders.length && plural(folders.length, isRoot ? "collection" : "gallery").replace("gallerys", "galleries"),
       photos && plural(photos, "photo"),
@@ -294,7 +314,7 @@
                 : `<a href="${hashFor(c.id)}">${esc(c.name)}</a><span class="sep">/</span>`).join("")}
           </nav>
           <div class="tools">
-            ${items.length > 8 ? `<label class="search">${icon.search}<input id="q" type="search" placeholder="Filter by name or keyword" aria-label="Filter by name or keyword"></label>` : ""}
+            ${items.length > 8 ? `<label class="search">${icon.search}<input id="q" type="search" placeholder="Filter by name or tag" aria-label="Filter by name or tag"></label>` : ""}
             ${photos && videos ? `<div class="seg" id="kind" role="group" aria-label="Show">
                 <button data-kind="all" class="on">All</button><button data-kind="image">Photos</button><button data-kind="video">Videos</button>
               </div>` : ""}
@@ -304,7 +324,9 @@
               </select>` : ""}
             ${photos > 1 && s.slideshow ? `<button class="btn" id="slideshow">${icon.play}<span>Slideshow</span></button>` : ""}
             ${s.sharing ? `<button class="btn" id="share">${icon.share}<span>Share</span></button>` : ""}
-            ${D.demo && Auth.can("organize") ? `<a class="btn" href="#/organize/${esc(folder.id)}">${icon.gear}<span>Organize</span></a>` : ""}
+            ${D.demo && Auth.can("organize") ? (folder.isTag
+              ? `<a class="btn" href="#/library/${encodeURIComponent(folder.name)}">${icon.gear}<span>Open in Library</span></a>`
+              : `<a class="btn" href="#/organize/${esc(folder.id)}">${icon.gear}<span>Organize</span></a>`) : ""}
             ${C.showDriveLink && !D.demo ? `<a class="btn" href="${D.folderUrl(folder.id)}" target="_blank" rel="noopener">${icon.external}<span>Open in Drive</span></a>` : ""}
           </div>
         </div>
@@ -473,6 +495,7 @@
       <div class="notice login upload">
         <h1>Add photos and videos to “${esc(info.name)}”</h1>
         <p>${esc(info.description) || "Choose photos or videos from your device to add them to this gallery."}</p>
+        ${info.tags.length ? `<p class="up-tags">${icon.tag}Everything added here is tagged ${info.tags.map((t) => `<b>${esc(t)}</b>`).join(" ")}</p>` : ""}
         ${info.needsPassword ? `<label>Password for this upload link<input id="up-pass" type="password" autocomplete="off"></label>` : ""}
         <label class="dropzone" id="up-drop">${icon.upload}<b>Choose photos or videos</b><span>or drag them here</span>
           <input id="up-file" type="file" accept="image/*,video/*" multiple hidden></label>
@@ -512,7 +535,7 @@
       new: (a, b) => time(b) - time(a),
       old: (a, b) => time(a) - time(b),
     };
-    const haystack = (i) => `${i.name} ${i.title} ${i.description || ""} ${i.keywords || ""}`.toLowerCase();
+    const haystack = (i) => `${i.name} ${i.title} ${i.description || ""} ${(i.tags || []).join(" ")}`.toLowerCase();
     state.shown = state.items
       .filter((i) => (state.kind === "all" || i.type === state.kind) && (!state.query || haystack(i).includes(state.query)))
       .sort(sorters[state.sort]);
@@ -703,7 +726,6 @@
       ["Taken", fmtDate(it.date)],
       ["Size", [it.w && it.h && `${it.w} × ${it.h}`, it.size && fmtBytes(it.size)].filter(Boolean).join("  ·  ")],
       ["Length", it.duration ? fmtDuration(it.duration) : ""],
-      ["Keywords", it.keywords],
       ["Camera", it.camera],
       ["Lens", it.lens],
       ["Settings", [
@@ -715,7 +737,12 @@
     ].filter(([, v]) => v);
     $("#lb-info").innerHTML =
       (it.description ? `<p class="lb-desc">${esc(it.description)}</p>` : "") +
-      `<dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
+      `<dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}` +
+      // on a tag page, say which gallery the file lives in
+      (it.galleryId ? `<dt>Gallery</dt><dd><a href="${hashFor(it.galleryId)}">${esc(it.galleryName)}</a></dd>` : "") +
+      // each tag opens everything else that carries it
+      ((it.tags || []).length ? `<dt>Tags</dt><dd class="lb-tags">${it.tags.map((t) => `<a href="${tagHash(t)}">${esc(t)}</a>`).join("")}</dd>` : "") +
+      `</dl>`;
   }
 
   function hideLightbox() {
@@ -792,13 +819,18 @@
   /* ── router ──────────────────────────────────────────────── */
   async function route() {
     const hash = location.hash;
-    document.body.classList.toggle("organizing", hash.startsWith("#/organize"));
+    document.body.classList.toggle("organizing", hash.startsWith("#/organize") || hash.startsWith("#/library"));
 
     if (D.demo && hash === "#/login") { hideLightbox(); return renderLogin(); }
     if (D.demo && hash.startsWith("#/organize")) {
       hideLightbox();
       state.folderId = null; // gallery pages reload when we come back
       return window.Organizer.open(decodeURIComponent(hash.split("/")[2] || "") || D.rootId);
+    }
+    if (D.demo && hash.startsWith("#/library")) {
+      hideLightbox();
+      state.folderId = null;
+      return window.Library.open(decodeURIComponent(hash.split("/")[2] || ""));
     }
     if (D.demo && hash.startsWith("#/u/")) { hideLightbox(); return renderUpload(decodeURIComponent(hash.slice(4))); } // an upload link
     if (D.demo && hash.startsWith("#/s/")) { // a view link
@@ -809,8 +841,10 @@
       } catch (err) { state.folderId = null; return renderError(err); }
     }
 
-    const m = location.hash.match(/^#\/f\/([^/]+)(?:\/p\/([^/]+))?/);
-    const folderId = m ? decodeURIComponent(m[1]) : D.rootId;
+    const m = location.hash.match(/^#\/(f|t)\/([^/]+)(?:\/p\/([^/]+))?/);
+    if (m && m[1] === "t" && !D.demo) m[1] = ""; // tags need the backend
+    const folderId = !m || !m[1] ? D.rootId : (m[1] === "t" ? TAG : "") + decodeURIComponent(m[2]);
+    if (m) m.splice(1, 1); // → [whole, id, photoId]
     const photoId = m && m[2] ? decodeURIComponent(m[2]) : null;
 
     if (folderId !== state.folderId) {

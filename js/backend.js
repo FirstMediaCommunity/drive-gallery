@@ -23,15 +23,21 @@
  * On top of that a gallery can ask for a password, and organizers can hand
  * out two kinds of link:
  *   view link    opens one gallery without logging in (optional password)
- *   upload link  lets someone add photos to one gallery without logging in
+ *   upload link  lets someone add photos and videos to one gallery without
+ *                logging in, and can tag everything that comes in through it
+ *
+ * TAGS: a gallery is where a file lives; tags are how you find it again.
+ * A file sits in exactly one gallery but can carry any number of tags, so
+ * the same photo turns up under its event, its subject and so on. The list
+ * of tags (the "vocabulary") is kept in named groups in db.tagGroups.
  *
  * Sections: storage → settings → who can see what → read API →
- *           passwords & links → organize API → demo library
+ *           passwords & links → organize API (incl. library & tags) → demo library
  */
 (() => {
   const C = window.GALLERY_CONFIG;
   const A = window.Auth;
-  const DB_KEY = "dg:db:v3";
+  const DB_KEY = "dg:db:v4";
   const GRANTS_KEY = "dg:link-grants";     // view links opened in this tab
   const UNLOCKED_KEY = "dg:unlocked";      // gallery passwords entered in this tab
   const ROOT = "demo-root";
@@ -55,7 +61,7 @@
   /* ── storage ─────────────────────────────────────────────── */
   let db;
   try { db = JSON.parse(localStorage.getItem(DB_KEY)); } catch {}
-  if (!db || !db.nodes || !db.nodes[ROOT]) db = seed();
+  if (!db || !db.nodes || !db.nodes[ROOT] || !db.tagGroups) db = seed();
 
   function save() {
     // Uploaded demo files only exist in memory, so they aren't saved.
@@ -68,6 +74,28 @@
   const childItems = (id) => Object.values(db.items).filter((i) => i.folderId === id).sort(byPos);
   const nextPos = (list) => (list.length ? Math.max(...list.map((x) => x.pos)) + 1 : 0);
   const node = (id) => db.nodes[id] || (() => { throw fail(404, "That gallery doesn't exist (it may have been deleted)."); })();
+
+  /* ── tags ────────────────────────────────────────────────── */
+  const OTHER = "Other"; // where tags nobody filed under a group end up
+  const sameTag = (a, b) => a.toLowerCase() === b.toLowerCase();
+  const knownTag = (name) => db.tagGroups.flatMap((g) => g.tags).find((t) => sameTag(t, name));
+  // Tidy a list of tag names: trim, drop blanks and repeats, and use the
+  // vocabulary's spelling. A tag nobody has used before joins "Other".
+  function cleanTags(list) {
+    const out = [];
+    for (const raw of Array.isArray(list) ? list : String(list ?? "").split(",")) {
+      const name = clean(raw, 40).replace(/\s+/g, " ");
+      if (!name) continue;
+      let tag = knownTag(name);
+      if (!tag) {
+        let other = db.tagGroups.find((g) => g.name === OTHER);
+        if (!other) db.tagGroups.push((other = { name: OTHER, tags: [] }));
+        other.tags.push((tag = name));
+      }
+      if (!out.includes(tag)) out.push(tag);
+    }
+    return out.slice(0, 30);
+  }
 
   /* ── gallery settings (the same ones SmugMug has) ────────── */
   const DEFAULTS = {
@@ -162,6 +190,22 @@
     }
   }
 
+  // May this visitor come across this file outside its gallery (on a tag page)?
+  // Stricter than opening a gallery by link: nothing from an unlisted or
+  // password-locked gallery, and nothing internal unless it is pinned public.
+  function canFindItem(i) {
+    const n = db.nodes[i.folderId];
+    if (!n) return false;
+    if (isOrganizer()) return true;
+    if (lockedBy(n) || !canSeeItem(i, n)) return false;
+    if (hasLinkTo(n)) return true;
+    for (let cur = n; cur; cur = db.nodes[cur.parentId]) {
+      if (cur.visibility === "unlisted") return false;
+      if (cur.visibility === "internal" && !isMember() && i.visibility !== "public") return false;
+    }
+    return true;
+  }
+
   // What we hand to the page. Visibility labels are only sent to members.
   const folderView = (n) => ({
     id: n.id, type: "folder", kind: n.kind, name: n.name, description: n.description || "",
@@ -234,6 +278,19 @@
     return { item, photos: items.length, folders: folders.length };
   }
 
+  // Everything this visitor may see that carries a tag, newest first, from
+  // every gallery at once. Each item says which gallery it lives in.
+  async function byTag(name) {
+    const tag = knownTag(clean(name, 40));
+    if (!tag) throw fail(404, "Nothing is tagged with that.");
+    const items = Object.values(db.items)
+      .filter((i) => (i.tags || []).includes(tag) && canFindItem(i))
+      .sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0) || a.pos - b.pos)
+      .map((i) => ({ ...itemView(i, db.nodes[i.folderId]), galleryId: i.folderId, galleryName: db.nodes[i.folderId].name }));
+    if (!items.length && !isOrganizer()) throw fail(404, "Nothing is tagged with that.");
+    return { tag, items };
+  }
+
   /* ── passwords & links (no login needed) ─────────────────── */
   // Enter a gallery's password. Remembered for this browser tab.
   async function unlock(folderId, password) {
@@ -263,7 +320,7 @@
     const link = liveLink(token);
     if (!link || link.type !== "upload") throw fail(404, "This upload link has expired or been turned off.");
     const n = db.nodes[link.folderId];
-    return { name: n.name, description: n.description || "", needsPassword: !!link.passwordHash };
+    return { name: n.name, description: n.description || "", needsPassword: !!link.passwordHash, tags: [...(link.tags || [])] };
   }
 
   // Add one file through an upload link.
@@ -271,15 +328,16 @@
     const link = liveLink(token);
     if (!link || link.type !== "upload") throw fail(404, "This upload link has expired or been turned off.");
     if (!(await linkPasswordOk(link, password))) throw fail(401, "That password isn't right.");
-    return addFile(link.folderId, file, `Upload link: ${link.label}`);
+    // whatever comes in through the link gets the link's tags — nobody tags by hand
+    return addFile(link.folderId, file, `Upload link: ${link.label}`, link.tags);
   }
 
   // `url` is the picture shown in the grid; a video also has `src` (the clip) and `duration`.
-  function addFile(folderId, { type, name, url, src, duration, w, h, size }, uploadedBy) {
+  function addFile(folderId, { type, name, url, src, duration, w, h, size }, uploadedBy, tags) {
     if (!url || !(w > 0) || !(h > 0)) throw fail(400, "That file couldn't be read.");
     const item = {
       id: uid("u"), ...(type === "video" ? { type: "video", src, duration: duration || 0 } : { type: "image" }), name: clean(name, 120), title: clean(name, 120).replace(/\.[a-z0-9]{2,5}$/i, ""),
-      description: "", keywords: "", w, h, ratio: w / h, date: new Date().toISOString(), size, url,
+      description: "", tags: cleanTags(tags), w, h, ratio: w / h, date: new Date().toISOString(), size, url,
       uploaded: Date.now(), modified: Date.now(), uploadedBy,
       folderId, visibility: "inherit", pos: nextPos(childItems(folderId)),
     };
@@ -367,7 +425,7 @@
       if (!i) throw fail(404, "That file doesn't exist.");
       if ("title" in patch && clean(patch.title)) i.title = clean(patch.title, 120);
       if ("description" in patch) i.description = clean(patch.description, 500);
-      if ("keywords" in patch) i.keywords = clean(patch.keywords, 300);
+      if ("tags" in patch) i.tags = cleanTags(patch.tags);
       if ("visibility" in patch && ["inherit", "public", "internal"].includes(patch.visibility)) i.visibility = patch.visibility;
       i.modified = Date.now();
       save();
@@ -428,7 +486,95 @@
       return addFile(folderId, file, who ? who.name : null);
     },
 
-    /* links: type "view" (see one gallery) or "upload" (add photos to one gallery) */
+    /* library: every file on the site in one list, whatever gallery it is in */
+    // filter: { q, tags: [...all must match], untagged, type: "image"|"video", folderId,
+    //           visibility: "public"|"unlisted"|"internal", year, month, sort }
+    // sort: "taken-desc" (default) | "taken-asc" | "uploaded-desc" | "name"
+    async library(filter = {}) {
+      requireOrganizer();
+      const q = clean(filter.q, 80).toLowerCase();
+      const want = (filter.tags || []).map(knownTag).filter(Boolean);
+      // what the public effectively gets: the file's own pin, else its gallery's setting
+      const seenAs = (i) => (i.visibility !== "inherit" ? i.visibility : db.nodes[i.folderId].visibility);
+      const all = Object.values(db.items).filter((i) => db.nodes[i.folderId]);
+      const items = all.filter((i) => {
+        const tags = i.tags || [];
+        if (filter.untagged ? tags.length : !want.every((t) => tags.includes(t))) return false;
+        if (filter.type && i.type !== filter.type) return false;
+        if (filter.folderId && !isInside(db.nodes[i.folderId], filter.folderId)) return false;
+        if (filter.visibility && seenAs(i) !== filter.visibility) return false;
+        if (filter.year && !String(i.date).startsWith(String(filter.year) + (filter.month ? "-" + filter.month : ""))) return false;
+        return !q || `${i.name} ${i.title} ${i.description || ""} ${tags.join(" ")} ${db.nodes[i.folderId].name}`.toLowerCase().includes(q);
+      });
+      const taken = (i) => Date.parse(i.date) || 0;
+      const sorts = {
+        "taken-desc": (a, b) => taken(b) - taken(a),
+        "taken-asc": (a, b) => taken(a) - taken(b),
+        "uploaded-desc": (a, b) => (b.uploaded || 0) - (a.uploaded || 0),
+        name: (a, b) => natural.compare(a.name, b.name),
+      };
+      items.sort(sorts[filter.sort] || sorts["taken-desc"]);
+      const months = {};
+      all.forEach((i) => { const m = String(i.date).slice(0, 7); if (/^\d{4}-\d{2}$/.test(m)) months[m] = (months[m] || 0) + 1; });
+      return {
+        total: all.length,
+        months, // { "2026-03": 180, … } for the By Date list
+        items: items.map((i) => ({ ...i, tags: [...(i.tags || [])], galleryName: db.nodes[i.folderId].name, seenAs: seenAs(i) })),
+      };
+    },
+
+    /* tags */
+    // The vocabulary, in groups, with how many files carry each tag.
+    async tagGroups() {
+      requireOrganizer();
+      const counts = {};
+      Object.values(db.items).forEach((i) => (i.tags || []).forEach((t) => (counts[t] = (counts[t] || 0) + 1)));
+      return {
+        groups: db.tagGroups.map((g) => ({ name: g.name, tags: g.tags.map((t) => ({ name: t, count: counts[t] || 0 })) })),
+        untagged: Object.values(db.items).filter((i) => !(i.tags || []).length).length,
+      };
+    },
+    // Add a tag to a group (the group is created if it is new).
+    async addTag(group, name) {
+      requireOrganizer();
+      const tag = clean(name, 40).replace(/\s+/g, " ");
+      const groupName = clean(group, 30) || OTHER;
+      if (!tag) throw fail(400, "Type a tag.");
+      if (tag.includes(",")) throw fail(400, "Tags can't contain commas.");
+      if (knownTag(tag)) throw fail(400, `“${knownTag(tag)}” already exists.`);
+      let g = db.tagGroups.find((x) => sameTag(x.name, groupName));
+      if (!g) db.tagGroups.push((g = { name: groupName, tags: [] }));
+      g.tags.push(tag);
+      save();
+      return tag;
+    },
+    // Remove a tag from the vocabulary and from every file and upload link.
+    async removeTag(name) {
+      requireOrganizer();
+      const tag = knownTag(name);
+      if (!tag) return;
+      db.tagGroups.forEach((g) => (g.tags = g.tags.filter((t) => t !== tag)));
+      db.tagGroups = db.tagGroups.filter((g) => g.tags.length);
+      const strip = (x) => { if (x.tags) x.tags = x.tags.filter((t) => t !== tag); };
+      Object.values(db.items).forEach(strip);
+      Object.values(db.links).forEach(strip);
+      save();
+    },
+    // Add and/or remove tags on many files at once.
+    async tagItems(ids, { add = [], remove = [] }) {
+      requireOrganizer();
+      const adding = cleanTags(add);
+      const removing = remove.map(knownTag).filter(Boolean);
+      for (const id of ids) {
+        const i = db.items[id];
+        if (!i) continue;
+        i.tags = [...new Set([...(i.tags || []), ...adding])].filter((t) => !removing.includes(t)).slice(0, 30);
+        i.modified = Date.now();
+      }
+      save();
+    },
+
+    /* links: type "view" (see one gallery) or "upload" (add files to one gallery) */
     async links(folderId, type) {
       requireOrganizer();
       return Object.values(db.links)
@@ -436,7 +582,8 @@
         .sort((a, b) => b.created - a.created)
         .map(({ passwordHash, ...l }) => ({ ...l, hasPassword: !!passwordHash }));
     },
-    async createLink(folderId, { type, label, days, password }) {
+    // `tags` (upload links only) are put on every file that arrives through the link.
+    async createLink(folderId, { type, label, days, password, tags }) {
       requireOrganizer();
       const n = node(folderId);
       if (type === "upload" && n.kind !== "gallery") throw fail(400, "Upload links only work on galleries.");
@@ -448,6 +595,7 @@
         created: Date.now(), expires: days ? Date.now() + days * 86400000 : null,
         createdBy: who ? who.username : null,
         passwordHash: password ? await hash(token, password) : null,
+        tags: type === "upload" ? cleanTags(tags) : [],
       };
       save();
       return token;
@@ -467,14 +615,24 @@
 
   /* ── demo library ────────────────────────────────────────── */
   function seed() {
-    const d = { nodes: {}, items: {}, links: {} };
+    const d = {
+      nodes: {}, items: {}, links: {},
+      tagGroups: [
+        { name: "Category", tags: ["competition", "build season", "outreach", "camp", "team"] },
+        { name: "Event", tags: ["District Event", "Championship", "Off-season", "Kickoff"] },
+        { name: "Subject", tags: ["robot", "pit", "drive team", "awards", "team photo"] },
+      ],
+    };
+    const subjects = [["robot"], [], ["pit"], ["robot", "drive team"], [], ["team photo"], [], ["awards"], [], []];
     const ratios = [1.5, 1.5, 1.5, 1.5, 0.667, 1.333, 1.778, 1.5, 0.8, 1];
     const folderPos = {};
     const add = (id, kind, name, parentId, visibility, description = "", settings = {}) => {
       folderPos[parentId] = (folderPos[parentId] ?? -1) + 1;
       d.nodes[id] = { id, kind, name, description, parentId, visibility, coverId: null, pos: folderPos[parentId], created: folderPos[parentId], settings };
     };
-    const photos = (folderId, n, prefix, keywords, publicOnes = []) => {
+    // `tags` go on every file; `withSubjects` also sprinkles Subject tags around
+    // so the same tag turns up in several galleries.
+    const photos = (folderId, n, prefix, month, tags, publicOnes = [], withSubjects = true) => {
       for (let i = 1; i <= n; i++) {
         const video = i % 9 === 4;
         const r = video ? 1.778 : ratios[(i * 7 + folderId.length * 3) % ratios.length];
@@ -483,9 +641,10 @@
         const day = String(((i * 3) % 27) + 1).padStart(2, "0");
         d.items[`${folderId}-${i}`] = {
           id: `${folderId}-${i}`, type: video ? "video" : "image",
-          name: `${prefix}_${num}.${video ? "mp4" : "jpg"}`, title: `${prefix}_${num}`, description: "", keywords,
+          name: `${prefix}_${num}.${video ? "mp4" : "jpg"}`, title: `${prefix}_${num}`, description: "",
+          tags: [...tags, ...(withSubjects ? subjects[(i + folderId.length) % subjects.length] : [])],
           w, h: Math.round(w / r), ratio: r,
-          date: `2026-03-${day}T1${i % 10}:24:00`,
+          date: `${month}-${day}T1${i % 10}:24:00`,
           uploaded: Date.parse(`2026-04-01T12:00:00`) + i * 60000, modified: Date.parse(`2026-04-01T12:00:00`) + i * 60000,
           size: 4200000 + i * 137000,
           ...(video
@@ -508,17 +667,23 @@
     add("demo-offseason", "gallery", "Off-season", "demo-comp", "unlisted");
     add("demo-kickoff", "gallery", "Kickoff", "demo-build", "public", "Game reveal day", { style: "smugmug" });
     add("demo-shop", "gallery", "In the Shop", "demo-build", "internal", "Work in progress — not for sharing yet");
-    photos("demo-district", 64, "DISTRICT", "competition, district, 2026");
-    photos("demo-champs", 36, "CHAMPS", "competition, championship, houston, 2026");
-    photos("demo-offseason", 14, "OFFSEASON", "competition, off-season");
-    photos("demo-kickoff", 18, "KICKOFF", "kickoff, build season, 2026");
-    photos("demo-shop", 42, "SHOP", "build season, shop, robot");
-    photos("demo-outreach", 24, "OUTREACH", "outreach, demo");
-    photos("demo-camps", 30, "CAMP", "camp, summer", [2, 7, 12]);
-    photos("demo-team", 12, "TEAM", "team");
-    photos("demo-uploads", 8, "UPLOAD", "");
+    photos("demo-district", 64, "DISTRICT", "2026-03", ["competition", "District Event"]);
+    photos("demo-champs", 36, "CHAMPS", "2026-04", ["competition", "Championship"]);
+    photos("demo-offseason", 14, "OFFSEASON", "2025-10", ["competition", "Off-season"]);
+    photos("demo-kickoff", 18, "KICKOFF", "2026-01", ["build season", "Kickoff"]);
+    photos("demo-shop", 42, "SHOP", "2026-02", ["build season"]);
+    photos("demo-outreach", 24, "OUTREACH", "2025-11", ["outreach"]);
+    photos("demo-camps", 30, "CAMP", "2025-07", ["camp"], [2, 7, 12]);
+    photos("demo-team", 12, "TEAM", "2025-09", ["team"]);
+    photos("demo-uploads", 8, "UPLOAD", "2026-05", [], [], false); // untagged, waiting to be sorted
+    // an upload link that tags whatever comes in through it
+    d.links["demo-upload-district"] = {
+      token: "demo-upload-district", folderId: "demo-district", type: "upload", label: "District Event — parent photos",
+      created: Date.parse("2026-03-01T12:00:00"), expires: null, createdBy: "organizer", passwordHash: null,
+      tags: ["competition", "District Event"],
+    };
     return d;
   }
 
-  window.Backend = { rootId: ROOT, list, folder, path, cover, unlock, redeemLink, uploadInfo, guestUpload, admin };
+  window.Backend = { rootId: ROOT, list, folder, path, cover, byTag, unlock, redeemLink, uploadInfo, guestUpload, admin };
 })();

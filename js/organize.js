@@ -131,7 +131,7 @@
       <div class="org" id="org">
         <div class="org-head">
           <div class="org-title">
-            <h1>Site Organizer</h1>
+            <nav class="org-tabs"><a class="on" href="#/organize">Organize</a><a href="#/library">Library</a></nav>
             <nav class="org-crumbs">${st.path.map((c, i) =>
               i === st.path.length - 1 ? `<span>${esc(i ? c.name : "Site Homepage")}</span>`
               : `<a href="#/organize/${i ? esc(c.id) : ""}">${esc(i ? c.name : "Site Homepage")}</a><i>/</i>`).join("")}
@@ -156,6 +156,7 @@
           <button class="obtn" data-act="upload" title="Upload photos and videos to this gallery">${icon.upload}<span>Upload</span></button>
           <i class="osep"></i>
           <button class="obtn" data-act="settings" title="Settings">${icon.gear}<span>Settings</span></button>
+          <button class="obtn" data-act="tags" title="Add or remove tags on the selected photos and videos">${icon.tag}<span>Tags</span></button>
           <button class="obtn" data-act="visibility" title="Who can see this">${icon.eye}<span>Visibility</span></button>
           <button class="obtn" data-act="cover" title="Use the selected photo as this gallery's feature image">${icon.star}<span>Make cover</span></button>
           <button class="obtn" data-act="move" title="Move to another folder">${icon.move}<span>Move</span></button>
@@ -205,6 +206,7 @@
       upload: st.folder.kind === "gallery",
       settings: n === 1 || (n === 0 && !isRoot),
       visibility: n > 0 || !isRoot,
+      tags: n > 0 && [...st.selected].every((id) => !isNode(id)),
       cover: oneItem,
       move: n > 0,
       delete: n > 0,
@@ -317,6 +319,11 @@
       const id = ids[0];
       if (isNode(id)) folderSettings(st.folders.find((f) => f.id === id));
       else itemSettings(st.items.find((i) => i.id === id));
+    },
+
+    tags() {
+      const { items } = selection();
+      tagDialog(st.items.filter((i) => items.includes(i.id)));
     },
 
     visibility(btn) {
@@ -571,13 +578,76 @@
     });
   }
 
-  function itemSettings(it) {
+  /* ── tag picker ──────────────────────────────────────────── */
+  // Fills `box` with every tag as a chip you click on or off, plus a row for
+  // adding a new tag. `current` is a list of tags that are on, or — when
+  // tagging many files at once — a map of tag → how many of the `total`
+  // files have it (a tag only some have starts out "mixed").
+  // Returns { tags(): the ones switched on, changes(): { add, remove } }.
+  async function tagPicker(box, current = [], total = 1) {
+    const counts = Array.isArray(current) ? Object.fromEntries(current.map((t) => [t, total])) : { ...current };
+    const startState = (t) => (!counts[t] ? "off" : counts[t] >= total ? "on" : "mixed");
+    const state = {};
+    let groups = [];
+    const paint = () => {
+      box.innerHTML = `
+        ${groups.map((g) => `
+          <div class="otag-group"><span>${A.esc(g.name)}</span><div>${g.tags.map((t) =>
+            `<button type="button" class="otag ${state[t.name]}" data-tag="${A.esc(t.name)}" aria-pressed="${state[t.name] === "on"}"
+              title="${state[t.name] === "mixed" ? "Some of the selected files have this tag" : ""}">${A.esc(t.name)}</button>`).join("")}</div></div>`).join("")
+          || `<small class="ohint">No tags yet. Add the first one below.</small>`}
+        <div class="otag-new">
+          <input placeholder="New tag" maxlength="40" data-new-tag>
+          <input placeholder="Group (e.g. Event)" maxlength="30" list="otag-groups" data-new-group>
+          <datalist id="otag-groups">${groups.map((g) => `<option value="${A.esc(g.name)}">`).join("")}</datalist>
+          <button type="button" class="obtn" data-add-tag>${A.icon.plus}Add tag</button>
+        </div>
+        <p class="odlg-note" data-tag-note role="alert"></p>`;
+    };
+    const load = async () => {
+      groups = (await B.admin.tagGroups()).groups;
+      groups.forEach((g) => g.tags.forEach((t) => { if (!(t.name in state)) state[t.name] = startState(t.name); }));
+      paint();
+    };
+    const addNew = async () => {
+      try {
+        const tag = await B.admin.addTag(box.querySelector("[data-new-group]").value, box.querySelector("[data-new-tag]").value);
+        state[tag] = "on";
+        await load();
+        box.querySelector("[data-new-tag]").focus();
+      } catch (err) { box.querySelector("[data-tag-note]").textContent = err.message; } // shown here: a toast would sit behind the dialog
+    };
+    box.addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-tag]");
+      if (chip) { state[chip.dataset.tag] = state[chip.dataset.tag] === "on" ? "off" : "on"; paint(); }
+      if (e.target.closest("[data-add-tag]")) addNew();
+    });
+    // Enter in the "new tag" box adds the tag instead of submitting the dialog
+    box.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.target.matches("[data-new-tag], [data-new-group]")) { e.preventDefault(); addNew(); }
+    });
+    await load();
+    const on = () => Object.keys(state).filter((t) => state[t] === "on");
+    return {
+      tags: on,
+      changes: () => ({
+        add: on().filter((t) => startState(t) !== "on"),
+        remove: Object.keys(state).filter((t) => state[t] === "off" && startState(t) !== "off"),
+      }),
+    };
+  }
+
+  // `after` runs once the change is saved (the Library passes its own refresh).
+  function itemSettings(it, after = refresh) {
+    let picker;
     dialog({
-      title: "Photo settings",
+      title: it.type === "video" ? "Video settings" : "Photo settings",
+      wide: true,
       body: `
         <label class="ofield">Title<input name="title" maxlength="120" required value="${A.esc(it.title)}"></label>
         <label class="ofield">Caption<textarea name="description" rows="2" maxlength="500">${A.esc(it.description || "")}</textarea></label>
-        <label class="ofield">Keywords<input name="keywords" maxlength="300" placeholder="keyword 1, keyword 2, etc" value="${A.esc(it.keywords || "")}"></label>
+        <div class="ofield">Tags <small class="ohint">Click to switch a tag on or off. Tags are how this file is found from the Library and from tag pages, whatever gallery it is in.</small>
+          <div class="otags" data-tags></div></div>
         <div class="ofield">Who can see it${radios("visibility", ITEM_VIS, it.visibility)}</div>
         <div class="ofield">File details
           <dl class="ometa">${[
@@ -595,10 +665,33 @@
               it.exposure && (it.exposure < 1 ? `1/${Math.round(1 / it.exposure)}s` : `${it.exposure}s`), it.iso && `ISO ${it.iso}`].filter(Boolean).join(" · ")],
           ].filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${A.esc(v)}</dd>`).join("")}</dl>
         </div>`,
+      onOpen: async (dlg) => { picker = await tagPicker(dlg.querySelector("[data-tags]"), it.tags || []); },
       onOk: async (dlg) => {
-        await B.admin.updateItem(it.id, { title: val(dlg, "title"), description: val(dlg, "description"), keywords: val(dlg, "keywords"), visibility: picked(dlg, "visibility") });
+        const patch = { title: val(dlg, "title"), description: val(dlg, "description"), visibility: picked(dlg, "visibility") };
+        if (picker) patch.tags = picker.tags();
+        await B.admin.updateItem(it.id, patch);
         A.toast("Saved");
-        await refresh();
+        await after();
+      },
+    });
+  }
+
+  // Add or remove tags on several files at once.
+  function tagDialog(items, after = refresh) {
+    const counts = {};
+    items.forEach((i) => (i.tags || []).forEach((t) => (counts[t] = (counts[t] || 0) + 1)));
+    let picker;
+    dialog({
+      title: `Tags for ${A.plural(items.length, "file")}`,
+      wide: true,
+      body: `<p>Click a tag to put it on every selected file; click again to take it off all of them. Tags left faded are on only some of the files and stay as they are.</p>
+        <div class="otags" data-tags></div>`,
+      onOpen: async (dlg) => { picker = await tagPicker(dlg.querySelector("[data-tags]"), counts, items.length); },
+      onOk: async () => {
+        if (!picker) return;
+        await B.admin.tagItems(items.map((i) => i.id), picker.changes());
+        A.toast("Tags saved");
+        await after();
       },
     });
   }
@@ -642,13 +735,15 @@
   // List + create + turn off links for one folder. type: "view" or "upload".
   async function linksSection(box, folderId, type) {
     const route = type === "upload" ? "#/u/" : "#/s/";
+    let picker; // upload links: tags put on everything that arrives through the link
     const paint = async () => {
       const links = await B.admin.links(folderId, type);
       box.innerHTML = `
         ${links.map((l) => `
           <div class="olink">
             <div><b>${A.esc(l.label)}${l.hasPassword ? ` <em class="ovis">${A.icon.lock}Password</em>` : ""}</b>
-              <small>Created ${A.fmtDate(l.created)}${l.expires ? ` · ${l.expires < Date.now() ? "expired" : "expires"} ${A.fmtDate(l.expires)}` : " · never expires"}</small></div>
+              <small>Created ${A.fmtDate(l.created)}${l.expires ? ` · ${l.expires < Date.now() ? "expired" : "expires"} ${A.fmtDate(l.expires)}` : " · never expires"}${
+                (l.tags || []).length ? ` · tags uploads: ${A.esc(l.tags.join(", "))}` : ""}</small></div>
             <button type="button" class="obtn" data-copy="${A.esc(siteUrl(route + l.token))}">${A.icon.copy}Copy</button>
             <button type="button" class="obtn obtn-danger" data-revoke="${A.esc(l.token)}">Turn off</button>
           </div>`).join("") || `<small class="ohint">No ${type} links yet.</small>`}
@@ -658,13 +753,18 @@
           <select data-days><option value="">Never expires</option><option value="7">Expires in 7 days</option><option value="30">Expires in 30 days</option></select>
           <button type="button" class="obtn obtn-accent" data-make>Create ${type} link</button>
         </div>
+        ${type === "upload" ? `<small class="ohint">Tag everything uploaded through the new link (optional) — nobody has to tag by hand:</small>
+          <div class="otags" data-link-tags></div>` : ""}
         <small class="ohint">Demo note: the pretend server lives in this browser, so links only work here. On a real server they work for anyone.</small>`;
+      const tagBox = box.querySelector("[data-link-tags]");
+      picker = tagBox ? await tagPicker(tagBox) : null;
     };
     box.addEventListener("click", (e) => run(async () => {
       if (e.target.closest("[data-make]")) {
         await B.admin.createLink(folderId, {
           type, label: box.querySelector("[data-label]").value, password: box.querySelector("[data-password]").value,
           days: Number(box.querySelector("[data-days]").value) || null,
+          tags: picker ? picker.tags() : [],
         });
         A.toast(`${type === "upload" ? "Upload" : "View"} link created`);
         await paint();
@@ -676,15 +776,16 @@
     await paint();
   }
 
-  function moveDialog(ids, targetKind) {
+  // The Library passes its own { tree, here, after }; Organize uses its current folder.
+  function moveDialog(ids, targetKind, { tree = st.tree, here = st.folderId, after } = {}) {
     const rows = [];
     const walk = (n, depth) => {
       const blocked = ids.includes(n.id);
       if (blocked) return; // can't move something into itself
-      rows.push({ n, depth, ok: n.kind === targetKind && n.id !== st.folderId });
+      rows.push({ n, depth, ok: n.kind === targetKind && n.id !== here });
       n.children.forEach((c) => walk(c, depth + 1));
     };
-    walk(st.tree, 0);
+    walk(tree, 0);
     dialog({
       title: `Move ${A.plural(ids.length, "item")} to…`,
       ok: "Move here",
@@ -698,8 +799,9 @@
         const target = picked(dlg, "target");
         if (!target) throw new Error("Pick a destination.");
         await B.admin.move(ids, target);
-        st.selected.clear();
         A.toast("Moved");
+        if (after) return after();
+        st.selected.clear();
         await refresh();
       },
     });
@@ -774,5 +876,7 @@
     });
   }
 
-  window.Organizer = { open };
+  // Shared with js/library.js, which reuses the same dialogs.
+  const helpers = () => { A = window.App; return { run, menu, dialog, itemSettings, tagDialog, tagPicker, moveDialog, VIS, ITEM_VIS }; };
+  window.Organizer = { open, helpers };
 })();

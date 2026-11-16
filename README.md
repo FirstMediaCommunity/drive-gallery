@@ -10,6 +10,7 @@ Your photos stay in Google Drive. The website just reads the folder and shows it
 - **Videos** play right in the viewer.
 - **Filter, sort, light/dark mode**, and it works on phones.
 - **Organize screen** *(preview)* — a SmugMug-style backend for people with the right permission: create galleries and folders, drag to reorder or move, set covers, choose who can see what, and make access links.
+- **Library and tags** *(preview)* — every photo and video in one searchable place, whatever gallery it is in. Tag files in bulk, click a tag to see everything that carries it, and let upload links tag whatever comes in through them.
 - **Public / Unlisted / Internal** visibility per gallery, and per photo *(preview)*.
 - **No build step, no frameworks.** A handful of small JavaScript files you can read in one sitting.
 
@@ -80,6 +81,16 @@ Demo mode has three kinds of visitor so you can see what each one gets. The logi
 
 Things to try as the organizer: create a gallery, drag photos to reorder them, drag a gallery onto a folder in the sidebar, set a gallery to Internal and then log out to watch it disappear, pin one photo in an internal gallery as "Always public", and create an access link under **Share**.
 
+**Library and tags.** Next to Organize there is a **Library** tab, modelled on SmugMug's: every file on the site in one grid, grouped by month.
+
+- **Find things:** search names, captions, tags and gallery names; filter by photo or video, gallery, visibility and month; or click tags in the sidebar (click two to see files that have both).
+- **Tag in bulk:** select files, press **Tags**, and click tags on or off for the whole selection. **Untagged** in the sidebar shows what still needs sorting.
+- **Keep the tag list tidy:** tags live in groups (the demo has Category, Event and Subject). **Manage** adds, groups and deletes them.
+- **Tag pages:** in the viewer's info panel every tag is a link. It opens a page with everything a visitor is allowed to see that carries that tag, from every gallery.
+- **Upload links that tag for you:** when creating an upload link, pick the tags it should apply. Everything uploaded through it arrives tagged. The demo's District Event gallery has one ready under Share.
+
+A gallery is where a file lives; tags are how you find it again. One photo sits in one gallery but can carry any number of tags.
+
 **Gallery settings** (select a gallery → Settings) follow SmugMug's tabs:
 
 | Tab | Settings |
@@ -93,7 +104,7 @@ Things to try as the organizer: create a gallery, drag photos to reorder them, d
 **Two kinds of link**, both under Share and under Settings → Security & Sharing:
 
 - **View link** — lets someone without an account (a parent, a sponsor) see one gallery, even an Internal one. Optional password and expiry; turn it off any time.
-- **Upload link** — lets someone add photos and videos to one gallery without logging in. It does not let them view it.
+- **Upload link** — lets someone add photos and videos to one gallery without logging in. It does not let them view it. It can carry tags that are put on everything uploaded through it.
 
 Not copied from SmugMug: selling/shopping cart, comments, map features and "hide owner", which don't apply here.
 
@@ -178,7 +189,8 @@ Logins, Internal/Unlisted galleries, access links and the Organize screen need a
 
 - **No review step.** Anything added to a Public gallery, including guest uploads, is public straight away. Nobody approves it first.
 - **Uploads are pretend.** The upload page and Organize accept photos and videos, but in the demo they stay in your browser tab and vanish on reload. A real server has to get large videos into Drive without routing them through a small host.
-- **No tags.** A photo lives in one gallery; there is no search across galleries.
+- **Tags sit on top of galleries, they don't replace them.** Every file still lives in exactly one gallery. Cross-gallery search is for organizers (the Library); visitors get tag pages but no site-wide search box.
+- **Tag names are visible to anyone who can see the photo.** Don't use them for anything private, such as student names.
 - **View and upload links** let people without an account see or add photos. Think about whether that is right for photos of students before turning them on for real.
 
 ### Visibility is a setting, not a folder
@@ -206,6 +218,7 @@ js/config.js    your settings  ← the only file you need to edit
 js/drive.js     reads a public Google Drive folder (live mode)
 js/app.js       the gallery: folder pages, photo grid, viewer, URL routing
 js/organize.js  the Organize screen
+js/library.js   the Library screen (all media, search, tags)
 js/auth.js      DEMO login and roles          ← pretend; needs a real login
 js/backend.js   DEMO server (in the browser)  ← pretend; needs a real server
 docs/BACKEND.md what building the real versions involves

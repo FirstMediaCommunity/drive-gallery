@@ -394,6 +394,70 @@ body.organizing .footer, body.organizing .demo-banner { display: none; }
 .org-crumbs span { color: var(--o-fg); }
 .org-crumbs i { opacity: .5; font-style: normal; }
 .org-head-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.org-tabs { display: flex; gap: 22px; margin-bottom: 4px; }
+.org-tabs a { padding-bottom: 3px; border-bottom: 2px solid transparent; font-size: 22px; font-weight: 500; color: var(--o-dim); }
+.org-tabs a:hover { color: #fff; }
+.org-tabs a.on { color: #fff; border-bottom-color: var(--accent); }
+
+/* tags: chips you click on or off (dialogs, Library) */
+.otags { margin-top: 8px; font-weight: 400; }
+.otag-group { display: grid; grid-template-columns: 92px 1fr; gap: 6px 10px; align-items: start; margin-bottom: 10px; }
+.otag-group > span { padding-top: 6px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8a8a8a; }
+.otag-group > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.otag {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border: 1px solid #4a4a4a; border-radius: 99px;
+  background: none; color: #d4d4d4; font: inherit; font-size: 13px; cursor: pointer;
+}
+button.otag:hover { border-color: #fff; }
+.otag.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent); color: #fff; }
+.otag.mixed { border-style: dashed; border-color: var(--accent); color: #fff; opacity: .7; }
+span.otag { cursor: default; }
+.otag i { font-style: normal; font-size: 11px; color: #b5b5b5; }
+.otag button { border: 0; padding: 0 2px; background: none; color: #ff8f85; font: inherit; cursor: pointer; }
+.otag button:hover { color: #fff; }
+.otag-new { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+.otag-new input {
+  flex: 1 1 130px; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid #4a4a4a; border-radius: 3px;
+  background: #101010; color: #fff; font: inherit; font-size: 13px;
+}
+.otag-new .obtn { height: 32px; padding: 0 10px; font-size: 11px; }
+.odlg-note { min-height: 18px; margin: 6px 0 0 !important; color: #ffb4ab !important; font-size: 13px; }
+
+/* Library screen (shares the Organize screen's frame) */
+.lib-search {
+  display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; width: min(380px, 80vw);
+  border: 1px solid #4a4a4a; border-radius: 99px; color: var(--o-dim);
+}
+.lib-search:focus-within { border-color: var(--accent); }
+.lib-search svg { width: 16px; height: 16px; flex: none; }
+.lib-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: #fff; font: inherit; font-size: 14px; }
+.lib-side-head {
+  display: flex; align-items: center; justify-content: space-between; margin: 14px 8px 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8a8a8a;
+}
+.lib-side-btn { border: 0; background: none; color: var(--o-dim); font: inherit; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.lib-side-btn:hover { color: #fff; text-decoration: underline; }
+.lib-group { margin: 8px 8px 2px 24px; font-size: 12px; color: #8a8a8a; }
+.lib-side-empty { margin: 6px 8px; font-size: 13px; color: var(--o-dim); }
+.lib-n { margin-left: auto; padding-left: 8px; font-style: normal; font-size: 12px; color: #8a8a8a; }
+.lib .tnode a { padding-top: 6px; padding-bottom: 6px; }
+.lib-main { min-width: 0; padding-bottom: 40px; }
+.lib-main .org-grid { padding-bottom: 8px; }
+.lib-month { margin: 18px 20px 0; font-size: 17px; font-weight: 600; }
+.lib-month i { margin-left: 6px; font-style: normal; font-size: 13px; font-weight: 400; color: var(--o-dim); }
+.lib-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px 20px 0; font-size: 13px; color: var(--o-dim); }
+.lib-link { margin-left: 6px; color: var(--o-dim); text-decoration: underline; }
+.lib-link:hover { color: #fff; }
+.lib .oitem .otile-label span { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+
+/* tags in the viewer's info panel, and on the upload page */
+.lb-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px !important; }
+.lb-tags a { text-decoration: none; padding: 3px 10px; border: 1px solid rgb(255 255 255 / .3); border-radius: 99px; font-size: 13px; }
+.lb-tags a:hover { border-color: #fff; background: rgb(255 255 255 / .1); }
+.lb-info dd > a:not([class]) { text-decoration: underline; }
+.up-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+.up-tags svg { width: 15px; height: 15px; }
+.up-tags b { padding: 1px 9px; border: 1px solid var(--edge); border-radius: 99px; font-weight: 500; color: var(--fg); }
 
 .obtn {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;

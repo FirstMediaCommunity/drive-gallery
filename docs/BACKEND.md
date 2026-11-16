@@ -10,6 +10,7 @@ This page is for whoever wires it to a real login system and real storage — fo
 | --- | --- | --- |
 | Gallery pages, viewer | `js/app.js`, `css/style.css` | Real. Keep. |
 | Organize screen | `js/organize.js` | Real. Keep. |
+| Library screen, tag picker | `js/library.js`, `js/organize.js` | Real. Keep. |
 | Reading a public Drive folder | `js/drive.js` | Real (public, read-only mode). |
 | Login, roles | `js/auth.js` | **Pretend.** Two hard-coded demo accounts. |
 | Galleries, visibility, links, uploads | `js/backend.js` | **Pretend.** Stored in the browser's `localStorage`. |
@@ -35,7 +36,7 @@ These are missing from the demo too, not just from the pretend server:
 
 - **No review step.** Anything added to a Public gallery, including guest uploads through an upload link, is public immediately. If photos of students are involved you probably want uploads to land as "pending" until a person approves them.
 - **No real upload path.** The upload page and the Organize upload button accept photos and videos, but the demo only keeps them in the browser tab. Nothing is sent anywhere, and there is no size limit, virus scan or file-type check beyond what the browser reports.
-- **No tags or cross-gallery search.** A photo lives in exactly one gallery. Keywords are stored and shown but nothing searches across galleries by them. A tag-based library would treat an album as a saved tag search instead of a container.
+- **Galleries are still containers.** Tags and the Library search across galleries, but every file lives in exactly one gallery and a gallery is not a saved tag search. A fully tag-based library would turn that around; see [Tags](#tags).
 - **Live Drive mode has none of the above.** It is public and read-only.
 
 ## The two files to edit
@@ -74,8 +75,9 @@ Every function maps to one endpoint. If the endpoints return the same shapes the
 | `cover(folderId)` | `GET /api/folders/:id/cover` | `{ item, photos, folders }` |
 | `redeemLink(token, password?)` | `POST /api/links/:token/redeem` | folder id; sets a cookie that unlocks that folder. Throws `401` with `needsPassword: true` if the link has a password |
 | `unlock(folderId, password)` | `POST /api/folders/:id/unlock` | nothing; sets a cookie that remembers the gallery password was entered |
-| `uploadInfo(token)` | `GET /api/upload-links/:token` | `{ name, description, needsPassword }` for the upload page |
-| `guestUpload(token, password, file)` | `POST /api/upload-links/:token/files` | the new item. Lets the holder add files, never view |
+| `byTag(tag)` | `GET /api/tags/:tag/items` | `{ tag, items }` — every item with that tag this visitor may **find**, each with `galleryId` and `galleryName` |
+| `uploadInfo(token)` | `GET /api/upload-links/:token` | `{ name, description, needsPassword, tags }` for the upload page |
+| `guestUpload(token, password, file)` | `POST /api/upload-links/:token/files` | the new item, carrying the link's tags. Lets the holder add files, never view |
 
 `list` and `folder` throw `401` with `{ needsPassword: true, folderId, hint }` when a password-protected gallery hasn't been unlocked; the page then shows the password form. Every folder also carries a `settings` object (see `DEFAULTS` in `js/backend.js`) — never include the password or its hash in it.
 
@@ -87,12 +89,16 @@ Every function maps to one endpoint. If the endpoints return the same shapes the
 | `admin.contents(folderId)` | `GET /api/admin/folders/:id/contents` (unfiltered) |
 | `admin.create(parentId, { kind, name, description, visibility })` | `POST /api/admin/folders` |
 | `admin.updateFolder(id, { name, description, visibility, coverId, settings, password })` | `PATCH /api/admin/folders/:id` |
-| `admin.updateItem(id, { title, description, keywords, visibility })` | `PATCH /api/admin/items/:id` |
+| `admin.updateItem(id, { title, description, tags, visibility })` | `PATCH /api/admin/items/:id` |
+| `admin.library({ q, tags, untagged, type, folderId, visibility, year, month, sort })` | `GET /api/admin/library` → `{ total, months, items }`, each item with `galleryName` and `seenAs`. The demo returns everything; a real one should page. |
+| `admin.tagGroups()` | `GET /api/admin/tags` → `{ groups: [{ name, tags: [{ name, count }] }], untagged }` |
+| `admin.addTag(group, name)` / `admin.removeTag(name)` | `POST` / `DELETE /api/admin/tags` — removing takes the tag off every item and upload link |
+| `admin.tagItems(ids, { add, remove })` | `POST /api/admin/items/tags` |
 | `admin.move(ids, targetFolderId)` | `POST /api/admin/move` |
 | `admin.reorder(idsInOrder)` | `POST /api/admin/reorder` |
 | `admin.remove(ids)` | `POST /api/admin/delete` |
 | `admin.addItem(folderId, file)` | `POST /api/admin/folders/:id/upload` |
-| `admin.links(folderId, type)` / `createLink(folderId, { type, label, days, password })` / `revokeLink(token)` | `GET` / `POST` / `DELETE /api/admin/links` — `type` is `"view"` or `"upload"` |
+| `admin.links(folderId, type)` / `createLink(folderId, { type, label, days, password, tags })` / `revokeLink(token)` | `GET` / `POST` / `DELETE /api/admin/links` — `type` is `"view"` or `"upload"`; `tags` only applies to upload links |
 
 Errors: throw an `Error` with a `status` (`403`, `404`, `400`) and a human-readable `message` — the UI shows the message as-is.
 
@@ -113,6 +119,25 @@ item.visibility      inherit | public | internal
 The public site and the internal site are the same records passed through one filter — `canSeeItem`, `isListed` and `canOpen` near the top of `js/backend.js` are that filter, about 20 lines, and can be ported directly. "Make public" becomes a one-field update on the record.
 
 A gallery that is internal but contains pinned-public items shows up publicly with only those items in it: pick the few approved shots inside the internal gallery and pin them.
+
+## Tags
+
+A gallery is where a file lives; tags are how it is found again. An item has `tags: ["competition", "robot", …]`, and the list of allowed tags (the vocabulary) is kept in named groups so people pick from a list instead of inventing spellings:
+
+```
+tagGroups   [{ name: "Category", tags: ["competition", "outreach", …] }, { name: "Event", … }]
+item.tags   ["competition", "District Event", "robot"]
+link.tags   ["competition", "District Event"]     (upload links only)
+```
+
+- Tag names are unique across groups, compared without regard to case. A tag used before it is in the vocabulary joins a group called "Other".
+- An **upload link** can carry tags; the server puts them on every file that arrives through it. That is what keeps tagging from being a chore.
+- A **tag page** (`byTag`) is stricter than opening a gallery by link, because it surfaces files nobody was sent a link to. `canFindItem` in `js/backend.js` is the rule: nothing from an unlisted or password-locked gallery, nothing internal unless the visitor is a member or the item is pinned public. Port it as-is and test it — it is the easiest place to leak something.
+- **Tag names are shown to anyone who can see the item.** If tags could hold anything private (student names, for instance), either keep that group off public responses or don't offer it.
+
+To go fully tag-based — albums as saved tag searches rather than containers — keep `tags` and `byTag`, and make a "gallery" a stored `{ name, cover, tags }` whose contents are the `byTag`-style query. The gallery pages and viewer would not need to change; `list()` would.
+
+Other team tools can read tags from the same endpoints; nothing here is specific to the gallery UI.
 
 ## Serving the actual files from Google Drive
 
@@ -140,7 +165,7 @@ The same bandwidth limit applies in the other direction. For video, have the ser
 
 Names, order, visibility, covers and links need to live somewhere the server can query:
 
-- **Portal database** (best fit if the portal already has one): a `folders` table, an `items` table keyed by Drive file ID, a `links` table. The fields are exactly those in the seed data at the bottom of `js/backend.js`.
+- **Portal database** (best fit if the portal already has one): a `folders` table, an `items` table keyed by Drive file ID, a `links` table, and `tags` / `item_tags` tables. The fields are exactly those in the seed data at the bottom of `js/backend.js`.
 - **Drive itself**, if you want zero extra storage: Drive files have a `properties` map (`files.update` with `properties: { visibility: "public" }`) and folders can be created/renamed/moved through the Drive API. Simpler to deploy, slower to query, and ordering is awkward.
 
 Either way, uploads from the Organize screen should be authorised by the server, end up in the right Drive folder, and be recorded as an item.
