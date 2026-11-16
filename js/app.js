@@ -426,7 +426,44 @@
     };
   }
 
-  // The page an upload link opens: add photos to one gallery, no login.
+  // Reads a photo or video the visitor picked and returns what the backend
+  // needs: size, a picture to show in the grid and, for video, the clip itself.
+  const isMedia = (f) => f.type.startsWith("image/") || f.type.startsWith("video/");
+  async function readMedia(file) {
+    const blobUrl = URL.createObjectURL(file);
+    if (file.type.startsWith("image/")) {
+      const img = new Image();
+      await new Promise((ok, bad) => { img.onload = ok; img.onerror = () => bad(new Error(`${file.name} isn't an image the browser can read.`)); img.src = blobUrl; });
+      return { type: "image", name: file.name, url: blobUrl, w: img.naturalWidth, h: img.naturalHeight, size: file.size };
+    }
+    if (!file.type.startsWith("video/")) throw new Error(`${file.name} isn't a photo or a video.`);
+    const v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.preload = "auto";
+    const wait = (event, ms) => new Promise((ok, bad) => {
+      const t = setTimeout(ok, ms);
+      v.addEventListener(event, () => { clearTimeout(t); ok(); }, { once: true });
+      v.addEventListener("error", () => { clearTimeout(t); bad(new Error(`${file.name} isn't a video this browser can play.`)); }, { once: true });
+    });
+    v.src = blobUrl;
+    await wait("loadeddata", 8000);
+    if (!v.videoWidth) throw new Error(`${file.name} isn't a video this browser can play.`);
+    // grab a frame a little way in (the very first one is often black) for the grid
+    let poster = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 9"><rect width="16" height="9" fill="#222"/></svg>`);
+    try {
+      v.currentTime = Math.min(1, (v.duration || 0) / 4);
+      await wait("seeked", 3000);
+      const c = document.createElement("canvas");
+      const scale = Math.min(1, 1280 / v.videoWidth);
+      c.width = Math.round(v.videoWidth * scale); c.height = Math.round(v.videoHeight * scale);
+      c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+      const blob = await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.8));
+      if (blob) poster = URL.createObjectURL(blob);
+    } catch {}
+    return { type: "video", name: file.name, url: poster, src: blobUrl, w: v.videoWidth, h: v.videoHeight,
+             duration: isFinite(v.duration) ? v.duration : 0, size: file.size };
+  }
+
+  // The page an upload link opens: add photos and videos to one gallery, no login.
   async function renderUpload(token) {
     state.folderId = null;
     let info;
@@ -434,23 +471,21 @@
     document.title = `Upload to ${info.name} · ${C.siteTitle}`;
     view.innerHTML = `
       <div class="notice login upload">
-        <h1>Add photos to “${esc(info.name)}”</h1>
-        <p>${esc(info.description) || "Choose photos from your device to add them to this gallery."}</p>
+        <h1>Add photos and videos to “${esc(info.name)}”</h1>
+        <p>${esc(info.description) || "Choose photos or videos from your device to add them to this gallery."}</p>
         ${info.needsPassword ? `<label>Password for this upload link<input id="up-pass" type="password" autocomplete="off"></label>` : ""}
-        <label class="dropzone" id="up-drop">${icon.upload}<b>Choose photos</b><span>or drag them here</span>
-          <input id="up-file" type="file" accept="image/*" multiple hidden></label>
+        <label class="dropzone" id="up-drop">${icon.upload}<b>Choose photos or videos</b><span>or drag them here</span>
+          <input id="up-file" type="file" accept="image/*,video/*" multiple hidden></label>
         <p class="notice-err" id="up-err" role="alert"></p>
         <ul class="up-list" id="up-list"></ul>
         <p class="notice-hint">Demo: uploads stay in this browser tab until it is reloaded.</p>
       </div>`;
     const send = async (files) => {
       $("#up-err").textContent = "";
-      for (const file of files.filter((f) => f.type.startsWith("image/"))) {
+      if (files.length && !files.some(isMedia)) $("#up-err").textContent = "Only photos and videos can be added.";
+      for (const file of files.filter(isMedia)) {
         try {
-          const url = URL.createObjectURL(file);
-          const img = new Image();
-          await new Promise((ok, bad) => { img.onload = ok; img.onerror = () => bad(new Error(`${file.name} isn't an image the browser can read.`)); img.src = url; });
-          await Backend.guestUpload(token, $("#up-pass")?.value, { name: file.name, url, w: img.naturalWidth, h: img.naturalHeight, size: file.size });
+          await Backend.guestUpload(token, $("#up-pass")?.value, await readMedia(file));
           $("#up-list").insertAdjacentHTML("beforeend", `<li>${icon.check}${esc(file.name)}</li>`);
         } catch (err) {
           $("#up-err").textContent = err.message;
@@ -620,7 +655,7 @@
     if (it.type === "video") {
       toggleSlideshow(false);
       if (D.demo) {
-        stage.innerHTML = `<video class="lb-media" src="${D.demoVideo}" poster="${D.thumb(it, 1280)}" controls autoplay playsinline></video>`;
+        stage.innerHTML = `<video class="lb-media" src="${it.src || D.demoVideo}" poster="${D.thumb(it, 1280)}" controls autoplay playsinline></video>`;
       } else {
         stage.innerHTML = `<iframe class="lb-media lb-frame" src="${D.videoEmbedUrl(it)}" allow="autoplay; fullscreen" allowfullscreen title="${esc(it.title)}"></iframe>`;
       }
@@ -789,7 +824,7 @@
   }
 
   // Shared with js/organize.js
-  window.App = { $, esc, icon, toast, plural, fmtDate, hashFor, visBadge, view };
+  window.App = { $, esc, icon, toast, plural, fmtDate, hashFor, visBadge, view, readMedia };
 
   initChrome();
   Auth.onChange(() => {

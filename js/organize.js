@@ -153,7 +153,7 @@
 
         <div class="org-bar">
           <button class="obtn obtn-accent" data-act="create" title="Create a gallery or folder">${icon.plus}<span>Create</span></button>
-          <button class="obtn" data-act="upload" title="Upload photos to this gallery">${icon.upload}<span>Upload</span></button>
+          <button class="obtn" data-act="upload" title="Upload photos and videos to this gallery">${icon.upload}<span>Upload</span></button>
           <i class="osep"></i>
           <button class="obtn" data-act="settings" title="Settings">${icon.gear}<span>Settings</span></button>
           <button class="obtn" data-act="visibility" title="Who can see this">${icon.eye}<span>Visibility</span></button>
@@ -176,7 +176,7 @@
                                           : "This gallery is empty. Use <b>Upload</b> to add photos, or drag photos here from another gallery."}</p>` : ""}
           </section>
         </div>
-        <input type="file" id="org-file" accept="image/*" multiple hidden>
+        <input type="file" id="org-file" accept="image/*,video/*" multiple hidden>
       </div>`;
 
     // covers for folder tiles
@@ -286,13 +286,9 @@
 
     A.$("#org-file").addEventListener("change", (e) => run(async () => {
       const files = [...e.target.files];
-      for (const file of files) {
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        await new Promise((ok, bad) => { img.onload = ok; img.onerror = () => bad(new Error(`${file.name} isn't an image the browser can read.`)); img.src = url; });
-        await B.admin.addItem(st.folderId, { name: file.name, url, w: img.naturalWidth, h: img.naturalHeight, size: file.size });
-      }
-      A.toast(`Added ${A.plural(files.length, "photo")} — demo uploads last until you reload`);
+      e.target.value = ""; // so the same file can be picked again
+      for (const file of files) await B.admin.addItem(st.folderId, await A.readMedia(file));
+      A.toast(`Added ${A.plural(files.length, "file")} — demo uploads last until you reload`);
       await refresh();
     }));
 

@@ -93,7 +93,7 @@ Things to try as the organizer: create a gallery, drag photos to reorder them, d
 **Two kinds of link**, both under Share and under Settings → Security & Sharing:
 
 - **View link** — lets someone without an account (a parent, a sponsor) see one gallery, even an Internal one. Optional password and expiry; turn it off any time.
-- **Upload link** — lets someone add photos to one gallery without logging in. It does not let them view it.
+- **Upload link** — lets someone add photos and videos to one gallery without logging in. It does not let them view it.
 
 Not copied from SmugMug: selling/shopping cart, comments, map features and "hide owner", which don't apply here.
 
@@ -177,7 +177,7 @@ Logins, Internal/Unlisted galleries, access links and the Organize screen need a
 ### What the preview does not do
 
 - **No review step.** Anything added to a Public gallery, including guest uploads, is public straight away. Nobody approves it first.
-- **Uploads take images only**, not video.
+- **Uploads are pretend.** The upload page and Organize accept photos and videos, but in the demo they stay in your browser tab and vanish on reload. A real server has to get large videos into Drive without routing them through a small host.
 - **No tags.** A photo lives in one gallery; there is no search across galleries.
 - **View and upload links** let people without an account see or add photos. Think about whether that is right for photos of students before turning them on for real.
 

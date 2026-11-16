@@ -199,7 +199,7 @@
     rootId: ROOT,
     list, folder, path, cover, thumb,
     sortNatural: (a, b) => natural.compare(a.name, b.name),
-    downloadUrl: (item) => (DEMO ? thumb(item, 3000) : `https://drive.google.com/uc?export=download&id=${item.id}`),
+    downloadUrl: (item) => (DEMO ? item.src || thumb(item, 3000) : `https://drive.google.com/uc?export=download&id=${item.id}`),
     videoEmbedUrl: (item) => `https://drive.google.com/file/d/${item.id}/preview`,
     folderUrl: (id) => (DEMO ? "#" : `https://drive.google.com/drive/folders/${id}`),
   };

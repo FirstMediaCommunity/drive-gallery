@@ -34,7 +34,7 @@ For an experienced developer this is a project of weeks, not an afternoon. If yo
 These are missing from the demo too, not just from the pretend server:
 
 - **No review step.** Anything added to a Public gallery, including guest uploads through an upload link, is public immediately. If photos of students are involved you probably want uploads to land as "pending" until a person approves them.
-- **Uploads accept images only.** The upload page and the Organize upload button reject video.
+- **No real upload path.** The upload page and the Organize upload button accept photos and videos, but the demo only keeps them in the browser tab. Nothing is sent anywhere, and there is no size limit, virus scan or file-type check beyond what the browser reports.
 - **No tags or cross-gallery search.** A photo lives in exactly one gallery. Keywords are stored and shown but nothing searches across galleries by them. A tag-based library would treat an album as a saved tag search instead of a container.
 - **Live Drive mode has none of the above.** It is public and read-only.
 
@@ -134,7 +134,7 @@ To point the gallery at your choice, change `Drive.thumb()` (and the download an
 
 ### Large uploads
 
-The same bandwidth limit applies in the other direction. For video, have the server start a Drive resumable upload session and hand the session address to the browser, so the bytes go from the visitor straight to Google rather than through your host. Also untested here; the demo upload only pretends, and only accepts images.
+The same bandwidth limit applies in the other direction. For video, have the server start a Drive resumable upload session and hand the session address to the browser, so the bytes go from the visitor straight to Google rather than through your host. Also untested here; the demo upload only pretends. `readMedia()` in `js/app.js` is what reads the picked file, and for a video it produces `{ type: "video", url (a poster frame), src (the clip), duration, w, h, size }` — a real server would make the poster and read the duration itself.
 
 ## Where to keep the metadata
 
