@@ -450,25 +450,36 @@
 
   // Reads a photo or video the visitor picked and returns what the backend
   // needs: size, a picture to show in the grid and, for video, the clip itself.
-  const isMedia = (f) => f.type.startsWith("image/") || f.type.startsWith("video/");
+  // Formats the browser can't show (Insta360 .insv, RAW photos, HEIC on most
+  // browsers...) are still accepted: they get a placeholder picture and are
+  // kept as the original file.
+  const isMedia = (f) => !!Cull.kindOf(f);
+  const placeholder = (file, kind) => {
+    const ext = (Cull.extOf(file.name) || kind).toUpperCase();
+    const [w, h] = kind === "video" ? [1600, 900] : [1500, 1000];
+    const pic = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}"><rect width="${w}" height="${h}" fill="#2a2a2a"/><text x="50%" y="50%" fill="#bbb" font-family="system-ui,sans-serif" font-size="${h / 7}" font-weight="700" text-anchor="middle" dominant-baseline="middle">${kind === "video" ? "▶ " : ""}${esc(ext)}</text></svg>`);
+    return { type: kind, name: file.name, url: pic, src: kind === "video" ? URL.createObjectURL(file) : undefined, w, h, duration: 0, size: file.size, noPreview: true };
+  };
   async function readMedia(file) {
-    const blobUrl = URL.createObjectURL(file);
-    if (file.type.startsWith("image/")) {
+    const kind = Cull.kindOf(file);
+    if (!kind) throw new Error(`${file.name} isn't a photo or a video.`);
+    const blobUrl = URL.createObjectURL(Cull.playableBlob(file));
+    if (kind === "image") {
       const img = new Image();
-      await new Promise((ok, bad) => { img.onload = ok; img.onerror = () => bad(new Error(`${file.name} isn't an image the browser can read.`)); img.src = blobUrl; });
+      const ok = await new Promise((done) => { img.onload = () => done(true); img.onerror = () => done(false); img.src = blobUrl; });
+      if (!ok) { URL.revokeObjectURL(blobUrl); return placeholder(file, "image"); }
       return { type: "image", name: file.name, url: blobUrl, w: img.naturalWidth, h: img.naturalHeight, size: file.size };
     }
-    if (!file.type.startsWith("video/")) throw new Error(`${file.name} isn't a photo or a video.`);
     const v = document.createElement("video");
     v.muted = true; v.playsInline = true; v.preload = "auto";
     const wait = (event, ms) => new Promise((ok, bad) => {
       const t = setTimeout(ok, ms);
       v.addEventListener(event, () => { clearTimeout(t); ok(); }, { once: true });
-      v.addEventListener("error", () => { clearTimeout(t); bad(new Error(`${file.name} isn't a video this browser can play.`)); }, { once: true });
+      v.addEventListener("error", () => { clearTimeout(t); bad(new Error("unplayable")); }, { once: true });
     });
     v.src = blobUrl;
-    await wait("loadeddata", 8000);
-    if (!v.videoWidth) throw new Error(`${file.name} isn't a video this browser can play.`);
+    try { await wait("loadeddata", 8000); } catch {}
+    if (!v.videoWidth) { v.removeAttribute("src"); URL.revokeObjectURL(blobUrl); return placeholder(file, "video"); }
     // grab a frame a little way in (the very first one is often black) for the grid
     let poster = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 9"><rect width="16" height="9" fill="#222"/></svg>`);
     try {
@@ -485,6 +496,13 @@
              duration: isFinite(v.duration) ? v.duration : 0, size: file.size };
   }
 
+  // Before a batch goes up, let the person cull it. One file goes straight up.
+  async function cullFirst(files, existing) {
+    const media = files.filter(isMedia);
+    if (media.length < 2) return media;
+    return Cull.review(media, { existing });
+  }
+
   // The page an upload link opens: add photos and videos to one gallery, no login.
   async function renderUpload(token) {
     state.folderId = null;
@@ -498,7 +516,7 @@
         ${info.tags.length ? `<p class="up-tags">${icon.tag}Everything added here is tagged ${info.tags.map((t) => `<b>${esc(t)}</b>`).join(" ")}</p>` : ""}
         ${info.needsPassword ? `<label>Password for this upload link<input id="up-pass" type="password" autocomplete="off"></label>` : ""}
         <label class="dropzone" id="up-drop">${icon.upload}<b>Choose photos or videos</b><span>or drag them here</span>
-          <input id="up-file" type="file" accept="image/*,video/*" multiple hidden></label>
+          <input id="up-file" type="file" accept="${Cull.ACCEPT}" multiple hidden></label>
         <p class="notice-err" id="up-err" role="alert"></p>
         <ul class="up-list" id="up-list"></ul>
         <p class="notice-hint">Demo: uploads stay in this browser tab until it is reloaded.</p>
@@ -506,7 +524,9 @@
     const send = async (files) => {
       $("#up-err").textContent = "";
       if (files.length && !files.some(isMedia)) $("#up-err").textContent = "Only photos and videos can be added.";
-      for (const file of files.filter(isMedia)) {
+      const picked = await cullFirst(files); // a guest never sees what the gallery already holds
+      if (!picked) return;
+      for (const file of picked) {
         try {
           await Backend.guestUpload(token, $("#up-pass")?.value, await readMedia(file));
           $("#up-list").insertAdjacentHTML("beforeend", `<li>${icon.check}${esc(file.name)}</li>`);
@@ -675,7 +695,10 @@
 
     const stage = $("#lb-stage");
     stage.innerHTML = "";
-    if (it.type === "video") {
+    if (it.noPreview) {
+      toggleSlideshow(false);
+      stage.innerHTML = `<div class="lb-nopreview"><img src="${it.url}" alt=""><p>This format can't be shown in a browser. The original file is kept as it was uploaded.</p></div>`;
+    } else if (it.type === "video") {
       toggleSlideshow(false);
       if (D.demo) {
         stage.innerHTML = `<video class="lb-media" src="${it.src || D.demoVideo}" poster="${D.thumb(it, 1280)}" controls autoplay playsinline></video>`;
@@ -724,7 +747,7 @@
     const rows = [
       ["File", it.name],
       ["Taken", fmtDate(it.date)],
-      ["Size", [it.w && it.h && `${it.w} × ${it.h}`, it.size && fmtBytes(it.size)].filter(Boolean).join("  ·  ")],
+      ["Size", [!it.noPreview && it.w && it.h && `${it.w} × ${it.h}`, it.size && fmtBytes(it.size)].filter(Boolean).join("  ·  ")],
       ["Length", it.duration ? fmtDuration(it.duration) : ""],
       ["Camera", it.camera],
       ["Lens", it.lens],
@@ -858,7 +881,7 @@
   }
 
   // Shared with js/organize.js
-  window.App = { $, esc, icon, toast, plural, fmtDate, hashFor, visBadge, view, readMedia };
+  window.App = { $, esc, icon, toast, plural, fmtDate, hashFor, visBadge, view, readMedia, cullFirst };
 
   initChrome();
   Auth.onChange(() => {

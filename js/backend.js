@@ -333,12 +333,12 @@
   }
 
   // `url` is the picture shown in the grid; a video also has `src` (the clip) and `duration`.
-  function addFile(folderId, { type, name, url, src, duration, w, h, size }, uploadedBy, tags) {
+  function addFile(folderId, { type, name, url, src, duration, w, h, size, noPreview }, uploadedBy, tags) {
     if (!url || !(w > 0) || !(h > 0)) throw fail(400, "That file couldn't be read.");
     const item = {
       id: uid("u"), ...(type === "video" ? { type: "video", src, duration: duration || 0 } : { type: "image" }), name: clean(name, 120), title: clean(name, 120).replace(/\.[a-z0-9]{2,5}$/i, ""),
       description: "", tags: cleanTags(tags), w, h, ratio: w / h, date: new Date().toISOString(), size, url,
-      uploaded: Date.now(), modified: Date.now(), uploadedBy,
+      uploaded: Date.now(), modified: Date.now(), uploadedBy, ...(noPreview ? { noPreview: true } : {}),
       folderId, visibility: "inherit", pos: nextPos(childItems(folderId)),
     };
     db.items[item.id] = item;

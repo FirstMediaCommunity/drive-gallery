@@ -11,6 +11,7 @@ This page is for whoever wires it to a real login system and real storage — fo
 | Gallery pages, viewer | `js/app.js`, `css/style.css` | Real. Keep. |
 | Organize screen | `js/organize.js` | Real. Keep. |
 | Library screen, tag picker | `js/library.js`, `js/organize.js` | Real. Keep. |
+| Check before upload, file types | `js/cull.js` | Real. Runs in the browser before anything is sent. Keep. |
 | Reading a public Drive folder | `js/drive.js` | Real (public, read-only mode). |
 | Login, roles | `js/auth.js` | **Pretend.** Two hard-coded demo accounts. |
 | Galleries, visibility, links, uploads | `js/backend.js` | **Pretend.** Stored in the browser's `localStorage`. |
@@ -35,6 +36,7 @@ For an experienced developer this is a project of weeks, not an afternoon. If yo
 These are missing from the demo too, not just from the pretend server:
 
 - **No review step.** Anything added to a Public gallery, including guest uploads through an upload link, is public immediately. If photos of students are involved you probably want uploads to land as "pending" until a person approves them.
+- **The upload check is advice, not a gate.** `js/cull.js` runs in the visitor's browser, so a server can't rely on it: anyone can skip it. It saves storage for people who use it; size limits and file-type rules still belong on the server. A server can repeat the cheap part (refuse a file whose hash it already has).
 - **No real upload path.** The upload page and the Organize upload button accept photos and videos, but the demo only keeps them in the browser tab. Nothing is sent anywhere, and there is no size limit, virus scan or file-type check beyond what the browser reports.
 - **Galleries are still containers.** Tags and the Library search across galleries, but every file lives in exactly one gallery and a gallery is not a saved tag search. A fully tag-based library would turn that around; see [Tags](#tags).
 - **Live Drive mode has none of the above.** It is public and read-only.

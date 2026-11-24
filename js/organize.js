@@ -177,7 +177,7 @@
                                           : "This gallery is empty. Use <b>Upload</b> to add photos, or drag photos here from another gallery."}</p>` : ""}
           </section>
         </div>
-        <input type="file" id="org-file" accept="image/*,video/*" multiple hidden>
+        <input type="file" id="org-file" accept="${Cull.ACCEPT}" multiple hidden>
       </div>`;
 
     // covers for folder tiles
@@ -286,16 +286,29 @@
       await refresh();
     }));
 
-    A.$("#org-file").addEventListener("change", (e) => run(async () => {
-      const files = [...e.target.files];
+    A.$("#org-file").addEventListener("change", (e) => {
+      const all = [...e.target.files];
       e.target.value = ""; // so the same file can be picked again
-      for (const file of files) await B.admin.addItem(st.folderId, await A.readMedia(file));
-      A.toast(`Added ${A.plural(files.length, "file")} — demo uploads last until you reload`);
-      await refresh();
-    }));
+      uploadFiles(all);
+    });
 
     wireDragAndDrop(root);
   }
+
+  // Files picked or dropped: check them, then add the ones kept.
+  function uploadFiles(all) {
+    document.querySelector(".odlg-upload")?.close();
+    if (!all.length || st.folder.kind !== "gallery") return;
+    if (!all.some((f) => Cull.kindOf(f))) return A.toast("Only photos and videos can be added");
+    return run(async () => {
+      const files = await A.cullFirst(all, st.items.map((i) => ({ name: i.name, size: i.size })));
+      if (!files || !files.length) return;
+      for (const file of files) await B.admin.addItem(st.folderId, await A.readMedia(file));
+      A.toast(`Added ${A.plural(files.length, "file")} — demo uploads last until you reload`);
+      await refresh();
+    });
+  }
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
 
   /* ── toolbar actions ─────────────────────────────────────── */
   const selection = () => {
@@ -311,7 +324,23 @@
       ]);
     },
 
-    upload() { A.$("#org-file").click(); },
+    upload() {
+      dialog({
+        title: `Upload to ${st.folder.name}`,
+        close: "Cancel",
+        body: `
+          <label class="dropzone" data-drop>${A.icon.upload}<b>Drag photos and videos here</b><span>or click to choose files</span></label>
+          <p class="ohint">Two or more files are checked first, so you can skip blurry shots, duplicates and extra burst frames before they use up space. You can also drop files straight onto the gallery.</p>`,
+        onOpen(dlg) {
+          dlg.classList.add("odlg-upload");
+          const zone = dlg.querySelector("[data-drop]");
+          zone.onclick = (e) => { e.preventDefault(); A.$("#org-file").click(); };
+          zone.ondragover = (e) => { if (!hasFiles(e)) return; e.preventDefault(); zone.classList.add("over"); };
+          zone.ondragleave = () => zone.classList.remove("over");
+          zone.ondrop = (e) => { e.preventDefault(); zone.classList.remove("over"); uploadFiles([...e.dataTransfer.files]); };
+        },
+      });
+    },
 
     settings() {
       const { ids } = selection();
@@ -418,7 +447,7 @@
   }
 
   // dialog({ title, body, ok, danger, onOk(dlg), onOpen(dlg), wide }) — onOk may throw to keep it open.
-  function dialog({ title, body, ok = "Save", danger, onOk, onOpen, wide }) {
+  function dialog({ title, body, ok = "Save", danger, onOk, onOpen, wide, close }) {
     const dlg = document.createElement("dialog");
     dlg.className = "odlg" + (wide ? " odlg-wide" : "");
     dlg.innerHTML = `
@@ -427,7 +456,7 @@
         <div class="odlg-body">${body}</div>
         <p class="odlg-err" role="alert"></p>
         <div class="odlg-foot">
-          <button type="button" class="obtn" data-close>${onOk ? "Cancel" : "Done"}</button>
+          <button type="button" class="obtn" data-close>${close || (onOk ? "Cancel" : "Done")}</button>
           ${onOk ? `<button type="submit" class="obtn ${danger ? "obtn-danger" : "obtn-accent"}">${A.esc(ok)}</button>` : ""}
         </div>
       </form>`;
@@ -844,6 +873,23 @@
       }
       return draggingItems ? { el: tile, [x < 0.5 ? "before" : "after"]: tile.dataset.id } : null;
     }
+
+    // Files from the computer dropped anywhere on a gallery: upload them.
+    const filesOver = (on) => root.querySelector("#org-grid")?.classList.toggle("files-over", on);
+    root.addEventListener("dragover", (e) => {
+      if (!hasFiles(e) || st.dragging.length) return;
+      if (st.folder.kind !== "gallery") return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      filesOver(true);
+    });
+    root.addEventListener("dragleave", (e) => { if (!root.contains(e.relatedTarget)) filesOver(false); });
+    root.addEventListener("drop", (e) => {
+      if (!hasFiles(e) || st.dragging.length) return;
+      e.preventDefault();
+      filesOver(false);
+      uploadFiles([...e.dataTransfer.files]);
+    });
 
     root.addEventListener("dragover", (e) => {
       const plan = dropPlan(e);
