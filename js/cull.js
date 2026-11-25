@@ -15,8 +15,22 @@
  * small shift search plus SSIM instead, which is cheaper and less exact.
  *
  * Added here: byte-for-byte copy detection (photos and videos), "already in
- * this gallery" for organizers, a storage summary, and support for camera
- * formats browsers don't recognise (.insv, .lrv, RAW files and so on).
+ * this gallery" for organizers, a storage summary, support for camera
+ * formats browsers don't recognise (.insv, .lrv, RAW files and so on), and
+ * exposure checks (see "Exposure" below).
+ *
+ * Exposure: the original's only exposure check (over 80% of pixels near
+ * white) caught none of the 23 photos a photographer marked overexposed on a
+ * real 480-photo event card. These checks were set on that card instead:
+ *   - overexposed: the share of pixels with a channel at 250 or more
+ *     ("blown"). 30% or more suggests Skip (10 of the 23, none wrong), 15% or
+ *     more suggests Maybe (all 23, plus 26 to look at).
+ *   - underexposed, always Maybe since dark photos can often be fixed: the
+ *     brightness where the camera focused, read from Canon's focus data, so a
+ *     lit subject on a black background is not called dark (20 of 37 marked,
+ *     5 wrong). Without focus data: 2% or more pure black pixels, or half the
+ *     frame dark (no wrong calls on that card, but fewer caught).
+ * One card is a small sample; treat these numbers as a starting point.
  *
  *   Cull.kindOf(file)              "image" | "video" | null
  *   Cull.ACCEPT                    value for <input type="file" accept>
@@ -62,6 +76,9 @@
   const BLUR_THRESHOLD_SHALLOW_DOF = 50; // wide-aperture shots have soft backgrounds on purpose
   const SHALLOW_DOF_APERTURE = 4.0;
   const DARK_PIXEL = 30, BRIGHT_PIXEL = 225, BRIGHT_RATIO = 0.80;
+  const BLOWN_SKIP = 0.30, BLOWN_MAYBE = 0.15;      // share of pixels with a channel at 250+
+  const FOCUS_DARK = 44;                             // brightness (0-255) where the camera focused
+  const CRUSHED_DARK = 0.02, DARK_SHARE_DARK = 0.5;  // fallback when there is no focus data
   const BURST_WINDOW = 2.0; // seconds; frames further apart can't be one burst
   const ANALYZE_EDGE = 1024; // the thresholds above were tuned at this size
 
@@ -104,7 +121,39 @@
     // dark pixels count half: arenas are 40-60% dark stands and floor by design
     const exposure = clamp((1 - (dark / n) * 0.5 - brightRatio) * 100, 0, 100);
     const contrast = clamp((Math.sqrt(Math.max(0, sq / n - mean * mean)) / 75) * 100, 0, 100);
-    return { exposure, contrast, brightRatio };
+    return { exposure, contrast, brightRatio, mean };
+  }
+  // Clipped highlights and shadows, from the colour pixels.
+  function clipping(rgba) {
+    let blown = 0, crushed = 0, dark = 0;
+    const n = rgba.length / 4;
+    for (let i = 0; i < rgba.length; i += 4) {
+      const r = rgba[i], g = rgba[i + 1], b = rgba[i + 2];
+      if (r >= 250 || g >= 250 || b >= 250) blown++;
+      if (r <= 5 && g <= 5 && b <= 5) crushed++;
+      if (0.299 * r + 0.587 * g + 0.114 * b < DARK_PIXEL) dark++;
+    }
+    return { blown: blown / n, crushed: crushed / n, dark: dark / n };
+  }
+  // Average brightness inside the camera's focus area(s), on the upright
+  // analysis image. Focus positions are in the sensor's orientation, so they
+  // are turned the way the picture was (EXIF orientation 3, 6 or 8).
+  function focusBrightness(g, w, h, af, orientation) {
+    if (!af || !af.pts.length) return null;
+    const means = [];
+    for (const p of af.pts) {
+      let u = (af.w / 2 + p.x) / af.w, v = (af.h / 2 - p.y) / af.h, bu = p.w / af.w, bv = p.h / af.h;
+      if (orientation === 3) { u = 1 - u; v = 1 - v; }
+      else if (orientation === 6) { [u, v] = [1 - v, u]; [bu, bv] = [bv, bu]; }
+      else if (orientation === 8) { [u, v] = [v, 1 - u]; [bu, bv] = [bv, bu]; }
+      const half = Math.max(bu * w, bv * h, 0.02 * Math.max(w, h)) * 1.25;
+      const x0 = Math.max(0, Math.round(u * w - half)), x1 = Math.min(w, Math.round(u * w + half));
+      const y0 = Math.max(0, Math.round(v * h - half)), y1 = Math.min(h, Math.round(v * h + half));
+      let sum = 0, n = 0;
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { sum += g[y * w + x]; n++; }
+      if (n > 20) means.push(sum / n);
+    }
+    return means.length ? means.reduce((a, b) => a + b) / means.length : null;
   }
   function exifScore({ iso, shutter }) {
     const s = [];
@@ -123,9 +172,9 @@
   }
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-  /* ── EXIF (just the four fields the score needs) ─────────── */
+  /* ── EXIF (the score's four fields, orientation, and Canon focus data) ── */
   async function readExif(file) {
-    const out = { iso: null, shutter: null, aperture: null, time: null };
+    const out = { iso: null, shutter: null, aperture: null, time: null, orientation: 1, make: null, af: null };
     try {
       const buf = new DataView(await file.slice(0, 256 * 1024).arrayBuffer());
       if (buf.getUint16(0) !== 0xffd8) return out; // JPEG only; other formats score without EXIF
@@ -143,19 +192,43 @@
     const le = v.getUint16(base) === 0x4949;
     const u16 = (o) => v.getUint16(base + o, le), u32 = (o) => v.getUint32(base + o, le);
     const str = (o, n) => { let s = ""; for (let i = 0; i < n - 1; i++) s += String.fromCharCode(v.getUint8(base + o + i)); return s; };
-    const ifd = (o) => {
+    const raw = {};
+    const ifd = (o, keep) => {
       const tags = {};
       const n = u16(o);
       for (let i = 0; i < n; i++) {
         const e = o + 2 + i * 12, tag = u16(e), type = u16(e + 2), count = u32(e + 4);
         const at = (type === 2 && count > 4) || type === 5 ? u32(e + 8) : e + 8;
         tags[tag] = type === 3 ? u16(at) : type === 4 ? u32(at) : type === 5 ? u32(at) / (u32(at + 4) || 1) : type === 2 ? str(at, count) : null;
+        if (keep) keep[tag] = { type, count, at: count * (type === 3 ? 2 : 1) > 4 ? u32(e + 8) : e + 8 };
       }
       return tags;
     };
-    const exif = ifd(u32(4))[0x8769];
+    const i0 = ifd(u32(4));
+    out.orientation = i0[0x0112] || 1;
+    out.make = (i0[0x010f] || "").trim() || null;
+    const exif = i0[0x8769];
     if (exif == null) return out;
-    const t = ifd(exif);
+    const t = ifd(exif, raw);
+    // Canon writes where it focused (MakerNote tag 0x26, AFInfo2): the focus
+    // area sizes and positions from the sensor's centre, y counted upward.
+    try {
+      if (/^canon/i.test(out.make || "") && raw[0x927c]) {
+        const mk = {};
+        ifd(raw[0x927c].at, mk);
+        const a = mk[0x26];
+        if (a && a.type === 3 && a.count > 8) {
+          const s16 = (j) => v.getInt16(base + a.at + 2 * j, le);
+          const n = s16(2), valid = Math.max(1, s16(3)), afw = s16(6), afh = s16(7);
+          const pts = [];
+          for (let k = 0; k < Math.min(valid, n); k++) {
+            const pw = s16(8 + k), ph = s16(8 + n + k);
+            if (pw > 0 && ph > 0) pts.push({ w: pw, h: ph, x: s16(8 + 2 * n + k), y: s16(8 + 3 * n + k) });
+          }
+          if (afw > 0 && afh > 0 && pts.length) out.af = { w: afw, h: afh, pts };
+        }
+      }
+    } catch {} // a short read or an odd maker note just means no focus data
     out.shutter = t[0x829a] ?? null;
     out.aperture = t[0x829d] ?? null;
     out.iso = t[0x8827] ?? null;
@@ -327,20 +400,26 @@
       const { data } = pixels(big, w, h);
       const g = toGray(data);
       const sharp = sharpness(g, w, h);
-      const { exposure, contrast, brightRatio } = exposureAndContrast(g);
+      const { exposure, contrast, brightRatio, mean } = exposureAndContrast(g);
+      const clip = clipping(data);
       const exif = await readExif(file);
+      const focusMean = focusBrightness(g, w, h, exif.af, exif.orientation);
       const ex = exifScore(exif);
       const blurAt = exif.aperture != null && exif.aperture <= SHALLOW_DOF_APERTURE ? BLUR_THRESHOLD_SHALLOW_DOF : BLUR_THRESHOLD;
       const focusUncertain = sharp.robust < blurAt && blurAt <= sharp.peak;
       // A washed-out frame also measures as soft, so overexposure is checked
       // first here (the original checks blur first) to give the truer reason.
       let reason = null;
-      if (brightRatio > BRIGHT_RATIO) reason = "overexposed";
+      if (brightRatio > BRIGHT_RATIO || clip.blown >= BLOWN_SKIP) reason = "overexposed";
       else if (sharp.robust < blurAt && !focusUncertain) reason = "blurry";
       // dark is never an automatic reject: indoor and arena photos are dark
       const score = qualityScore(sharp.robust, exposure, contrast, ex);
       let tier = reason || score < 25 ? "unacceptable" : score < 50 ? "marginal" : "good";
       if (focusUncertain && !reason) tier = "marginal";
+      // softer exposure warnings: a Maybe, never a Skip on their own
+      let exposureFlag = null;
+      if (!reason && clip.blown >= BLOWN_MAYBE) exposureFlag = "bright";
+      else if (!reason && (focusMean != null ? focusMean < FOCUS_DARK : clip.crushed >= CRUSHED_DARK || clip.dark >= DARK_SHARE_DARK)) exposureFlag = "dark";
 
       const [sw, sh] = fit(w, h, 192);
       const sm = pixels(big, sw, sh);
@@ -351,8 +430,9 @@
         : await new Promise((ok) => thumbCanvas.toBlob(ok, "image/jpeg", 0.8));
       if (big !== full) big.close?.();
       return {
-        score: round(score), tier, reason, focusUncertain,
+        score: round(score), tier, reason, focusUncertain, exposureFlag,
         sharpness: round(sharp.robust), exposure: round(exposure), contrast: round(contrast),
+        blown: clip.blown, crushed: clip.crushed, brightness: mean, focusBrightness: focusMean,
         iso: exif.iso, shutter: exif.shutter, aperture: exif.aperture, time: exif.time,
         w: full.width, h: full.height,
         thumb: blob ? URL.createObjectURL(blob) : null,
@@ -436,8 +516,11 @@
     for (const e of entries) {
       if (e.reason || !e.a) continue;
       if (e.a.reason) { e.decision = "reject"; e.reason = e.a.reason; }
-      else if (e.a.tier === "good") e.decision = "keep";
-      else if (e.a.tier === "marginal") { e.decision = "maybe"; e.reason = e.a.focusUncertain ? "focus" : "low"; }
+      else if (e.a.tier === "good") {
+        e.decision = e.a.exposureFlag ? "maybe" : "keep";
+        e.reason = e.a.exposureFlag;
+      }
+      else if (e.a.tier === "marginal") { e.decision = "maybe"; e.reason = e.a.focusUncertain ? "focus" : e.a.exposureFlag || "low"; }
       else { e.decision = "reject"; e.reason = "low"; }
     }
     for (const g of groups) for (const m of g.members) {
@@ -487,6 +570,7 @@
     blurry: "Blurry", overexposed: "Overexposed", low: "Low quality", focus: "Focus unsure",
     duplicate: "Duplicate of a better copy", similar: "Similar to a better shot",
     copy: "Exact copy of another file", already: "Already in this gallery",
+    bright: "Bright, highlights may be blown", dark: "Dark, may be underexposed",
   };
   const LABEL = { keep: "Keep", maybe: "Maybe", reject: "Skip" };
   const KEYS = { k: "keep", m: "maybe", r: "reject", x: "reject" };
@@ -716,7 +800,7 @@
           <p class="cull-why">${e.reason ? esc(REASON[e.reason]) : e.note ? esc(e.note) : "Looks fine"}${e.suggested !== e.decision ? ` · suggested ${LABEL[e.suggested]}` : ""}</p>
           <dl>
             ${row("Size", fmtBytes(e.size))}
-            ${a ? row("Quality", `${Math.round(a.score)} / 100`) + row("Sharpness", Math.round(a.sharpness)) + row("Exposure", `${Math.round(a.exposure)}%`) + row("Contrast", `${Math.round(a.contrast)}%`) : ""}
+            ${a ? row("Quality", `${Math.round(a.score)} / 100`) + row("Sharpness", Math.round(a.sharpness)) + row("Exposure", `${Math.round(a.exposure)}%`) + row("Contrast", `${Math.round(a.contrast)}%`) + row("Blown highlights", `${Math.round(a.blown * 100)}%`) + row(a.focusBrightness != null ? "Brightness at focus" : "Brightness", `${Math.round(a.focusBrightness ?? a.brightness)} / 255`) : ""}
             ${a ? row("ISO", a.iso) + row("Shutter", shutter) + row("Aperture", a.aperture ? `f/${round(a.aperture)}` : null) + row("Pixels", `${a.w} × ${a.h}`) : ""}
           </dl>
           ${e.group ? `<p class="cull-grp">In a group of ${e.group.members.length}. ${e.group.best === e ? "This is the best one." : `<button class="linkish" data-jump="${e.group.best.id}">Show the best one</button>`}</p>` : ""}
